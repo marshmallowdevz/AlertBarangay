@@ -1,7 +1,7 @@
 ﻿import { useEffect, useState } from 'react';
 import './Official.css';
 import { configError, isConfigured, supabase } from './supabaseClient';
-import { initialConversations, initialReports, initialResidents } from './dashboardData';
+import { initialConversations, initialResidents } from './dashboardData';
 import OverviewView from './OverviewView';
 import ReportsView from './ReportsView';
 import ResidentsView from './ResidentsView';
@@ -9,37 +9,10 @@ import MessagesView from './MessagesView';
 import DispatchView from './DispatchView';
 import AnnouncementsView from './AnnouncementsView';
 import { createAnnouncement, listAnnouncements, subscribeToAnnouncements } from './announcementService';
+import Icon from './Icon';
+import { createReport as insertReport, listReports } from './reportService';
 
-const iconMap = {
-  overview: 'â—”',
-  reports: 'âš ',
-  dispatch: 'ðŸš¨',
-  residents: 'ðŸ‘¥',
-  messages: 'ðŸ’¬',
-  alert: 'âš ',
-  check: 'âœ“',
-  shield: 'ðŸ›¡',
-  clock: 'â±',
-  bell: 'ðŸ””',
-  menu: 'â˜°',
-  chevron: 'â–¾',
-  dot: 'â—‰',
-  settings: 'âš™',
-  logout: 'â†©',
-  phone: 'â˜Ž',
-  plus: '+',
-  flame: 'ðŸ”¥',
-  location: 'ðŸ“',
-  calendar: 'ðŸ—“',
-  activity: 'â–£',
-  x: 'âœ•',
-};
-
-const renderIcon = (name, size = 18) => (
-  <span aria-hidden="true" style={{ fontSize: size, lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-    {iconMap[name] ?? 'â€¢'}
-  </span>
-);
+const renderIcon = (name, size = 18) => <Icon name={name} size={size} />;
 
 const navItems = [
   { id: 'overview', label: 'Overview', icon: 'overview', badge: null },
@@ -81,7 +54,7 @@ function mergeAnnouncements(current, incoming) {
 function Official() {
   const [activeNav, setActiveNav] = useState('overview');
   const [operationalData, setOperationalData] = useState({
-    reports: initialReports,
+    reports: [],
     residents: initialResidents,
     conversations: initialConversations,
     dispatches: [],
@@ -96,6 +69,10 @@ function Official() {
   const [announcements, setAnnouncements] = useState([]);
   const [announcementLoading, setAnnouncementLoading] = useState(isConfigured);
   const [announcementError, setAnnouncementError] = useState(isConfigured ? '' : configError);
+  const [announcementRetry, setAnnouncementRetry] = useState(0);
+  const [reportsLoading, setReportsLoading] = useState(isConfigured);
+  const [reportsError, setReportsError] = useState(isConfigured ? '' : configError);
+  const [reportsRetry, setReportsRetry] = useState(0);
   const [postingAnnouncement, setPostingAnnouncement] = useState(false);
   const [storageError, setStorageError] = useState(initialData.error);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
@@ -127,7 +104,7 @@ function Official() {
       .then((rows) => { if (active) setAnnouncements((current) => mergeAnnouncements(current, rows)); })
       .catch((error) => {
         console.error('Unable to load shared announcements.', error);
-        if (active) setAnnouncementError('Announcements could not be loaded. Check your connection and try again.');
+        if (active) setAnnouncementError(error.message || 'Announcements could not be loaded.');
       })
       .finally(() => { if (active) setAnnouncementLoading(false); });
 
@@ -135,7 +112,22 @@ function Official() {
       active = false;
       unsubscribe();
     };
-  }, []);
+  }, [announcementRetry]);
+
+  useEffect(() => {
+    let active = true;
+    if (!isConfigured) return () => { active = false; };
+
+    listReports()
+      .then((rows) => { if (active) setOperationalData((current) => ({ ...current, reports: rows })); })
+      .catch((error) => {
+        console.error('Unable to load shared reports.', error);
+        if (active) setReportsError(error.message || 'Reports could not be loaded.');
+      })
+      .finally(() => { if (active) setReportsLoading(false); });
+
+    return () => { active = false; };
+  }, [reportsRetry]);
 
   const saveDashboardData = (nextProfile) => {
     try {
@@ -229,14 +221,8 @@ function Official() {
     setActiveNav('reports');
   };
 
-  const createReport = (reportInput) => {
-    const nextReport = {
-      ...reportInput,
-      id: `AB-${Date.now()}`,
-      status: 'Pending',
-      time: 'Just now',
-      dispatchHistory: [],
-    };
+  const createReport = async (reportInput) => {
+    const nextReport = await insertReport({ ...reportInput, author: profile.name || 'Barangay Official' });
     setOperationalData((current) => ({ ...current, reports: [nextReport, ...current.reports] }));
     setSelectedReportId(nextReport.id);
   };
@@ -418,6 +404,7 @@ function Official() {
               announcements={announcements}
               announcementLoading={announcementLoading}
               announcementError={announcementError}
+              onRetryAnnouncements={() => { setAnnouncementLoading(true); setAnnouncementError(''); setAnnouncementRetry((value) => value + 1); }}
               onNavigate={navigateTo}
               onSelectReport={selectReport}
               onAnnounce={() => { setFormError(''); setAnnouncementModalOpen(true); }}
@@ -426,9 +413,13 @@ function Official() {
           {activeNav === 'reports' && (
             <ReportsView
               reports={operationalData.reports}
+              loading={reportsLoading}
+              error={reportsError}
+              onRetry={() => { setReportsLoading(true); setReportsError(''); setReportsRetry((value) => value + 1); }}
               selectedReportId={selectedReportId}
               onSelectReport={setSelectedReportId}
               onCreateReport={createReport}
+              author={profile.name}
             />
           )}
           {activeNav === 'dispatch' && (
@@ -439,7 +430,7 @@ function Official() {
             <MessagesView conversations={operationalData.conversations} onReply={replyToConversation} />
           )}
           {activeNav === 'announcements' && (
-            <AnnouncementsView announcements={announcements} loading={announcementLoading} error={announcementError} onAnnounce={() => { setFormError(''); setAnnouncementModalOpen(true); }} />
+            <AnnouncementsView announcements={announcements} loading={announcementLoading} error={announcementError} onRetry={() => { setAnnouncementLoading(true); setAnnouncementError(''); setAnnouncementRetry((value) => value + 1); }} onAnnounce={() => { setFormError(''); setAnnouncementModalOpen(true); }} />
           )}
           <div className="footer">Â© 2026 AlertBarangay â€¢ Built for faster local emergency coordination</div>
         </div>

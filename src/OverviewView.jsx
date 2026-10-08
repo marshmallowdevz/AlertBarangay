@@ -1,7 +1,7 @@
 import './Official.css';
+import Icon from './Icon';
 
-const iconMap = { report: '⚠', dispatch: '🚨', residents: '👥', messages: '💬', response: '🛡', fire: '🔥', location: '📍', phone: '☎', calendar: '🗓', bell: '🔔', plus: '+' };
-const icon = (name) => <span aria-hidden="true">{iconMap[name] ?? '•'}</span>;
+const icon = (name) => <Icon name={name} />;
 
 const responseTypes = [
   { label: 'Medical', icon: 'response' },
@@ -16,7 +16,7 @@ const checklist = [
   'Review weather advisories and flood-prone routes.',
 ];
 
-export default function OverviewView({ reports, announcements, announcementLoading, announcementError, onNavigate, onSelectReport, onAnnounce }) {
+export default function OverviewView({ reports, announcements, announcementLoading, announcementError, onRetryAnnouncements, onNavigate, onSelectReport, onAnnounce }) {
   const openReports = reports.filter((report) => !['Resolved', 'Closed'].includes(report.status)).length;
   const resolvedReports = reports.filter((report) => report.status === 'Resolved').length;
 
@@ -24,8 +24,8 @@ export default function OverviewView({ reports, announcements, announcementLoadi
     <>
       <section className="stats" aria-label="Incident summary">
         {[
-          { label: 'Open incidents', value: openReports, icon: 'report', view: 'reports' },
-          { label: 'Resolved', value: resolvedReports, icon: 'report', view: 'reports' },
+          { label: 'Open incidents', value: openReports, icon: 'reports', view: 'reports' },
+          { label: 'Resolved', value: resolvedReports, icon: 'reports', view: 'reports' },
         ].map((stat) => (
           <button key={stat.label} type="button" className="stat-card stat-card-button" onClick={() => onNavigate(stat.view)}>
             <span className="stat-icon">{icon(stat.icon)}</span>
@@ -40,22 +40,22 @@ export default function OverviewView({ reports, announcements, announcementLoadi
             <h2>{icon('dispatch')} Incident feed</h2>
             <button type="button" className="btn btn-outline" onClick={() => onNavigate('reports')}>{icon('plus')} Reports</button>
           </div>
-          <p className="muted">Sample incident records for dashboard preview.</p>
-          <div className="table-wrap">
-            <table>
-              <thead><tr><th>Incident</th><th>Severity</th><th>Status</th><th>Location</th><th>Time</th></tr></thead>
-              <tbody>
-                {reports.slice(0, 4).map((report) => (
+          <p className="muted">Community incident reports shared through the dashboard.</p>
+          {reports.length === 0 ? <p className="empty">No reports have been submitted yet.</p> : (
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>Incident</th><th>Severity</th><th>Status</th><th>Location</th><th>Time</th></tr></thead>
+                <tbody>{reports.slice(0, 4).map((report) => (
                   <tr key={report.id}>
                     <td><button type="button" className="table-link" onClick={() => onSelectReport(report.id)}>{report.type} · {report.id}</button></td>
                     <td><span className={`pill ${report.severity === 'High' ? 'sev-high' : report.severity === 'Medium' ? 'sev-medium' : 'sev-low'}`}>{report.severity}</span></td>
                     <td><span className={`pill ${report.status === 'In progress' ? 'st-inprogress' : report.status === 'Resolved' ? 'st-resolved' : 'st-pending'}`}>{report.status}</span></td>
                     <td>{report.location}</td><td>{report.time}</td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
           <button type="button" className="link-btn" onClick={() => onNavigate('reports')}>View all reports</button>
         </section>
 
@@ -69,9 +69,7 @@ export default function OverviewView({ reports, announcements, announcementLoadi
                 </button>
               ))}
             </div>
-            <a className="hotline" href="tel:09171234567">
-              {icon('phone')}<span><strong>0917-123-4567</strong><small>Call center support</small></span>
-            </a>
+            <a className="hotline" href="tel:09171234567">{icon('phone')}<span><strong>0917-123-4567</strong><small>Call center support</small></span></a>
           </section>
 
           <section className="card">
@@ -89,8 +87,9 @@ export default function OverviewView({ reports, announcements, announcementLoadi
         </div>
         <div className="stack">
           {announcementLoading && <p className="muted" role="status">Loading announcements…</p>}
-          {announcementError && <p className="form-error" role="alert">{announcementError}</p>}
-          {!announcementLoading && !announcementError && announcements.length === 0 ? <p className="empty">No announcements have been posted yet.</p> : announcements.slice(0, 3).map((item) => (
+          {announcementError && <div className="error-row"><p className="form-error" role="alert">{announcementError}</p><button type="button" className="link-btn" onClick={onRetryAnnouncements} disabled={announcementLoading}>Retry</button></div>}
+          {!announcementLoading && !announcementError && announcements.length === 0 && <p className="empty">No announcements have been posted yet.</p>}
+          {announcements.slice(0, 3).map((item) => (
             <article key={item.id} className="list-item announcement-item">
               <strong>{item.title}</strong><p>{item.body}</p>
               <small>Posted by {item.author} · {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(item.created_at ?? item.createdAt))}</small>

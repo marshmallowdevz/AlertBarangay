@@ -5,7 +5,7 @@ function formatCreatedAt(announcement) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(createdAt));
 }
 
-export default function AnnouncementsView({ announcements, loading, error, onAnnounce }) {
+export default function AnnouncementsView({ announcements, loading, error, onRetry, onAnnounce }) {
   return (
     <section className="card">
       <div className="card-head">
@@ -13,7 +13,7 @@ export default function AnnouncementsView({ announcements, loading, error, onAnn
         <button type="button" className="btn btn-maroon" onClick={onAnnounce}>+ Announce</button>
       </div>
       {loading && <p className="muted" role="status">Loading announcements…</p>}
-      {error && <p className="form-error" role="alert">{error}</p>}
+      {error && <div className="error-row"><p className="form-error" role="alert">{error}</p><button type="button" className="btn btn-outline" onClick={onRetry} disabled={loading}>Retry</button></div>}
       {!loading && !error && announcements.length === 0 && <p className="empty">No announcements have been posted yet.</p>}
       <div className="stack">
         {announcements.map((announcement) => (

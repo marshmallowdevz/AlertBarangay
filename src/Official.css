@@ -265,6 +265,7 @@ td { padding: 14px 8px; border-bottom: 1px solid var(--line); white-space: nowra
 
 /* ---------- Lists ---------- */
 .stack { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
+.error-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .list-item { padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: #fffaf3; display: flex; flex-direction: column; gap: 6px; }
 .list-item.row { flex-direction: row; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
 .list-item.unread { background: #fff8e3; border-color: #ecd98f; }
