@@ -6,6 +6,7 @@ import OverviewView from './OverviewView';
 import ReportsView from './ReportsView';
 import ResidentsView from './ResidentsView';
 import MessagesView from './MessagesView';
+import DispatchView from './DispatchView';
 
 const iconMap = {
   overview: 'â—”',
@@ -78,6 +79,7 @@ function Official() {
     reports: initialReports,
     residents: initialResidents,
     conversations: initialConversations,
+    dispatches: [],
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -220,6 +222,23 @@ function Official() {
     }));
   };
 
+  const dispatchResponse = ({ reportId, responseType, note }) => {
+    const dispatch = {
+      id: `DSP-${Date.now()}`,
+      reportId,
+      responseType,
+      note,
+      createdAt: new Date().toISOString(),
+    };
+    setOperationalData((current) => ({
+      ...current,
+      dispatches: [dispatch, ...current.dispatches],
+      reports: current.reports.map((report) => report.id === reportId
+        ? { ...report, status: 'Assigned', dispatchHistory: [...report.dispatchHistory, dispatch] }
+        : report),
+    }));
+  };
+
   return (
     <div className="app">
       {sidebarOpen && <button type="button" className="overlay" aria-label="Close menu" onClick={() => setSidebarOpen(false)} />}
@@ -342,10 +361,7 @@ function Official() {
             />
           )}
           {activeNav === 'dispatch' && (
-            <section className="card">
-              <div className="card-head"><h2>Dispatch</h2></div>
-              <p className="muted">Choose a response for an open report from the dispatch view.</p>
-            </section>
+            <DispatchView reports={operationalData.reports} dispatches={operationalData.dispatches} onDispatch={dispatchResponse} />
           )}
           {activeNav === 'residents' && <ResidentsView residents={operationalData.residents} />}
           {activeNav === 'messages' && (

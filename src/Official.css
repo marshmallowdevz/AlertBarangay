@@ -193,6 +193,7 @@ nav { display: flex; flex-direction: column; gap: 6px; }
 
 .grid-2 { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; align-items: start; }
 .side-col { display: flex; flex-direction: column; gap: 24px; }
+.dispatch-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
 
 .type-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 18px; }
 .type-tile {
@@ -337,6 +338,7 @@ label.toggle input { width: 18px; height: 18px; accent-color: var(--maroon); }
 @media (max-width: 1200px) {
   .stats { grid-template-columns: repeat(2, 1fr); }
   .grid-2 { grid-template-columns: 1fr; }
+  .dispatch-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 900px) {

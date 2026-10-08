@@ -49,6 +49,14 @@ export default function ReportsView({ reports, selectedReportId, onSelectReport,
           <p><strong>Location:</strong> {selectedReport.location}</p>
           <p className="muted">{selectedReport.description}</p>
           <p className="muted">Status: {selectedReport.status} · Severity: {selectedReport.severity}</p>
+          <h3 className="history-title">Dispatch history</h3>
+          {selectedReport.dispatchHistory?.length ? (
+            <ul className="history-list">
+              {selectedReport.dispatchHistory.map((dispatch) => (
+                <li key={dispatch.id}><strong>{dispatch.responseType}</strong> · {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(dispatch.createdAt))}{dispatch.note && <p>{dispatch.note}</p>}</li>
+              ))}
+            </ul>
+          ) : <p className="muted">No responses dispatched for this report.</p>}
         </section>
       )}
 
