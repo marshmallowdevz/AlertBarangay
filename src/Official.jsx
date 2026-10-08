@@ -1,37 +1,40 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import './Official.css';
 import { configError, isConfigured } from './supabaseClient';
 import { initialConversations, initialReports, initialResidents } from './dashboardData';
+import OverviewView from './OverviewView';
+import ReportsView from './ReportsView';
+import ResidentsView from './ResidentsView';
+import MessagesView from './MessagesView';
 
 const iconMap = {
-  overview: '◔',
-  reports: '⚠',
-  dispatch: '🚨',
-  residents: '👥',
-  messages: '💬',
-  alert: '⚠',
-  check: '✓',
-  shield: '🛡',
-  clock: '⏱',
-  bell: '🔔',
-  menu: '☰',
-  search: '⌕',
-  chevron: '▾',
-  dot: '◉',
-  settings: '⚙',
-  logout: '↩',
-  phone: '☎',
+  overview: 'â—”',
+  reports: 'âš ',
+  dispatch: 'ðŸš¨',
+  residents: 'ðŸ‘¥',
+  messages: 'ðŸ’¬',
+  alert: 'âš ',
+  check: 'âœ“',
+  shield: 'ðŸ›¡',
+  clock: 'â±',
+  bell: 'ðŸ””',
+  menu: 'â˜°',
+  chevron: 'â–¾',
+  dot: 'â—‰',
+  settings: 'âš™',
+  logout: 'â†©',
+  phone: 'â˜Ž',
   plus: '+',
-  flame: '🔥',
-  location: '📍',
-  calendar: '🗓',
-  activity: '▣',
-  x: '✕',
+  flame: 'ðŸ”¥',
+  location: 'ðŸ“',
+  calendar: 'ðŸ—“',
+  activity: 'â–£',
+  x: 'âœ•',
 };
 
 const renderIcon = (name, size = 18) => (
   <span aria-hidden="true" style={{ fontSize: size, lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-    {iconMap[name] ?? '•'}
+    {iconMap[name] ?? 'â€¢'}
   </span>
 );
 
@@ -41,30 +44,7 @@ const navItems = [
   { id: 'dispatch', label: 'Dispatch', icon: 'dispatch', badge: '4' },
   { id: 'residents', label: 'Residents', icon: 'residents', badge: null },
   { id: 'messages', label: 'Messages', icon: 'messages', badge: '3' },
-];
-
-const stats = [
-  { label: 'Open incidents', value: '24', change: '+4 today', tone: 'maroon', icon: 'alert' },
-  { label: 'Resolved', value: '18', change: '92% SLA', tone: 'gold', icon: 'check' },
-];
-
-const serviceTypes = [
-  { label: 'Medical', icon: 'shield' },
-  { label: 'Fire', icon: 'flame' },
-  { label: 'Rescue', icon: 'dispatch' },
-  { label: 'Evacuation', icon: 'location' },
-];
-
-const actions = [
-  'Reconfirm family contact list for all priority households.',
-  'Verify backup generators and radio check with purok captains.',
-  'Review weekend weather advisory and flood-prone routes.',
-];
-
-const notifications = [
-  { title: 'Medical team dispatched to Barangay Hall', detail: 'Volunteer responders are en route. ETA 4 minutes.', time: '2 min ago', unread: true },
-  { title: 'Weather advisory updated', detail: 'Heavy rain warning remains active until 11:00 PM.', time: '18 min ago', unread: false },
-  { title: 'Resident report escalated', detail: 'Two households requested immediate welfare follow-up.', time: '1 hour ago', unread: false },
+  { id: 'announcements', label: 'Announcements', icon: 'bell', badge: null },
 ];
 
 const dashboardStorageKey = 'alertBarangay.dashboard';
@@ -94,14 +74,14 @@ function readDashboardData() {
 
 function Official() {
   const [activeNav, setActiveNav] = useState('overview');
-  const [operationalData] = useState({
+  const [operationalData, setOperationalData] = useState({
     reports: initialReports,
     residents: initialResidents,
     conversations: initialConversations,
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [notifyOpen, setNotifyOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [selectedReportId, setSelectedReportId] = useState('');
   const [initialData] = useState(readDashboardData);
   const [profile, setProfile] = useState(initialData.profile);
   const [announcements, setAnnouncements] = useState(initialData.announcements);
@@ -211,6 +191,35 @@ function Official() {
     }
   };
 
+  const navigateTo = (view) => setActiveNav(view);
+
+  const selectReport = (reportId) => {
+    setSelectedReportId(reportId);
+    setActiveNav('reports');
+  };
+
+  const createReport = (reportInput) => {
+    const nextReport = {
+      ...reportInput,
+      id: `AB-${Date.now()}`,
+      status: 'Pending',
+      time: 'Just now',
+      dispatchHistory: [],
+    };
+    setOperationalData((current) => ({ ...current, reports: [nextReport, ...current.reports] }));
+    setSelectedReportId(nextReport.id);
+  };
+
+  const replyToConversation = (conversationId, body) => {
+    const sentAt = new Date().toISOString();
+    setOperationalData((current) => ({
+      ...current,
+      conversations: current.conversations.map((conversation) => conversation.id === conversationId
+        ? { ...conversation, messages: [...conversation.messages, { id: `reply-${Date.now()}`, sender: profile.name, body, createdAt: sentAt }] }
+        : conversation),
+    }));
+  };
+
   return (
     <div className="app">
       {sidebarOpen && <button type="button" className="overlay" aria-label="Close menu" onClick={() => setSidebarOpen(false)} />}
@@ -274,42 +283,6 @@ function Official() {
           </div>
 
           <div className="topbar-right">
-            <button type="button" className="icon-btn" aria-label="Search">
-              {renderIcon('search', 18)}
-            </button>
-
-            <div className="dropdown-wrap">
-              <button
-                type="button"
-                className="bell-btn"
-                aria-label="Notifications"
-                onClick={() => {
-                  setNotifyOpen((open) => !open);
-                  setProfileOpen(false);
-                }}
-              >
-                {renderIcon('bell', 18)}
-                <span className="bell-dot" />
-              </button>
-
-              {notifyOpen && (
-                <div className="dropdown notif-dropdown">
-                  <div className="dropdown-head">
-                    <strong>Notifications</strong>
-                    <button type="button" className="link-btn">Mark all read</button>
-                  </div>
-                  {notifications.map((item) => (
-                    <button key={item.title} type="button" className={`notif-item ${item.unread ? 'unread' : ''}`}>
-                      <strong>{item.title}</strong>
-                      <small>{item.detail}</small>
-                      <small>{item.time}</small>
-                    </button>
-                  ))}
-                  <button type="button" className="dropdown-foot link-btn">View all alerts</button>
-                </div>
-              )}
-            </div>
-
             <div className="dropdown-wrap">
               <button
                 type="button"
@@ -317,7 +290,6 @@ function Official() {
                 aria-label="Profile menu"
                 onClick={() => {
                   setProfileOpen((open) => !open);
-                  setNotifyOpen(false);
                 }}
               >
                 <span className="avatar">
@@ -352,175 +324,50 @@ function Official() {
             </div>
           )}
 
-          <section className="stats">
-            {stats.map(({ label, value, change, icon, tone }) => (
-              <div key={label} className="stat-card">
-                <div className="stat-icon" style={{ background: tone === 'gold' ? '#f7ecc4' : '#f5e6e6' }}>
-                  {renderIcon(icon, 24)}
-                </div>
-                <div className="stat-text">
-                  <strong>{value}</strong>
-                  <b>{label}</b>
-                  <small>{change}</small>
-                </div>
-              </div>
-            ))}
-          </section>
-
-          <div className="grid-2">
+          {activeNav === 'overview' && (
+            <OverviewView
+              reports={operationalData.reports}
+              announcements={announcements}
+              onNavigate={navigateTo}
+              onSelectReport={selectReport}
+              onAnnounce={() => { setFormError(''); setAnnouncementModalOpen(true); }}
+            />
+          )}
+          {activeNav === 'reports' && (
+            <ReportsView
+              reports={operationalData.reports}
+              selectedReportId={selectedReportId}
+              onSelectReport={setSelectedReportId}
+              onCreateReport={createReport}
+            />
+          )}
+          {activeNav === 'dispatch' && (
             <section className="card">
-              <div className="card-head">
-                <h2>{renderIcon('dispatch', 18)} Live incident feed</h2>
-                <button type="button" className="btn btn-outline">
-                  {renderIcon('plus', 16)} New report
-                </button>
-              </div>
-              <p className="muted">865 households monitored across 8 puroks</p>
-
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Incident</th>
-                      <th>Severity</th>
-                      <th>Status</th>
-                      <th>Location</th>
-                      <th>Time</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {operationalData.reports.map((row) => (
-                      <tr key={row.id}>
-                        <td>
-                          <div className="type-cell">
-                            <span className="pill sev-medium">{row.type}</span>
-                            <strong>{row.id}</strong>
-                          </div>
-                        </td>
-                        <td>
-                          <span className={`pill ${row.severity === 'High' ? 'sev-high' : row.severity === 'Medium' ? 'sev-medium' : 'sev-low'}`}>
-                            {row.severity}
-                          </span>
-                        </td>
-                        <td>
-                          <span className={`pill ${row.status === 'In progress' ? 'st-inprogress' : row.status === 'Resolved' ? 'st-resolved' : 'st-pending'}`}>
-                            {row.status}
-                          </span>
-                        </td>
-                        <td>{row.location}</td>
-                        <td>{row.time}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <div className="card-head"><h2>Dispatch</h2></div>
+              <p className="muted">Choose a response for an open report from the dispatch view.</p>
             </section>
-
-            <div className="side-col">
-              <section className="card">
-                <div className="card-head">
-                  <h2>{renderIcon('shield', 18)} Response types</h2>
-                </div>
-                <div className="type-grid">
-                  {serviceTypes.map(({ label, icon }) => (
-                    <div key={label} className="type-tile">
-                      {renderIcon(icon, 22)}
-                      <span>{label}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="hotline">
-                  {renderIcon('phone', 20)}
-                  <div>
-                    <strong>0917-123-4567</strong>
-                    <small>Call center support</small>
-                  </div>
-                </div>
-                <div className="available">12 responders available now</div>
-              </section>
-
-              <section className="card">
-                <div className="card-head">
-                  <h2>{renderIcon('calendar', 18)} Today&apos;s checklist</h2>
-                </div>
-                <ul className="reminder">
-                  {actions.map((action) => (
-                    <li key={action}>{action}</li>
-                  ))}
-                </ul>
-                <div className="motto">“Prepared communities respond faster together.”</div>
-              </section>
-            </div>
-          </div>
-
-          <div className="grid-2">
+          )}
+          {activeNav === 'residents' && <ResidentsView residents={operationalData.residents} />}
+          {activeNav === 'messages' && (
+            <MessagesView conversations={operationalData.conversations} onReply={replyToConversation} />
+          )}
+          {activeNav === 'announcements' && (
             <section className="card">
               <div className="card-head">
-                <h2>{renderIcon('activity', 18)} Operations summary</h2>
-                <div className="filters">
-                  <button type="button" className="chip active">Today</button>
-                  <button type="button" className="chip">This week</button>
-                </div>
+                <div><h2>Announcements</h2><p className="muted">Posts are currently saved in this browser.</p></div>
+                <button type="button" className="btn btn-maroon" onClick={() => { setFormError(''); setAnnouncementModalOpen(true); }}>+ Announce</button>
               </div>
-
               <div className="stack">
-                <div className="list-item row">
-                  <div>
-                    <strong>Household welfare checks</strong>
-                    <small>26 of 37 scheduled families confirmed</small>
-                  </div>
-                  <span className="pill sev-medium">71%</span>
-                </div>
-                <div className="list-item row">
-                  <div>
-                    <strong>Volunteer mobilization</strong>
-                    <small>6 teams on standby for flood response</small>
-                  </div>
-                  <span className="pill st-inprogress">Active</span>
-                </div>
-                <div className="list-item row">
-                  <div>
-                    <strong>Barangay inventory</strong>
-                    <small>All emergency kits inspected and restocked</small>
-                  </div>
-                  <span className="pill sev-low">Ready</span>
-                </div>
-              </div>
-            </section>
-
-            <section className="card">
-              <div className="card-head">
-                <h2>{renderIcon('bell', 18)} Announcements</h2>
-                <button
-                  type="button"
-                  className="btn btn-outline"
-                  onClick={() => {
-                    setFormError('');
-                    setAnnouncementModalOpen(true);
-                  }}
-                >
-                  {renderIcon('plus', 14)} Announce
-                </button>
-              </div>
-              <p className="muted">Posts are currently saved in this browser. Connect Supabase to share them with other users.</p>
-              <div className="stack">
-                {announcements.length === 0 ? (
-                  <p className="empty">No announcements yet. Post one to keep the community informed.</p>
-                ) : announcements.map((announcement) => (
+                {announcements.length === 0 ? <p className="empty">No announcements yet.</p> : announcements.map((announcement) => (
                   <article key={announcement.id} className="list-item announcement-item">
-                    <strong>{announcement.title}</strong>
-                    <p>{announcement.body}</p>
-                    <small>Posted by {announcement.author} · {new Intl.DateTimeFormat(undefined, {
-                      dateStyle: 'medium',
-                      timeStyle: 'short',
-                    }).format(new Date(announcement.createdAt))}</small>
+                    <strong>{announcement.title}</strong><p>{announcement.body}</p>
+                    <small>Posted by {announcement.author} · {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(announcement.createdAt))}</small>
                   </article>
                 ))}
               </div>
             </section>
-          </div>
-
-          <div className="footer">© 2026 AlertBarangay • Built for faster local emergency coordination</div>
+          )}
+          <div className="footer">Â© 2026 AlertBarangay â€¢ Built for faster local emergency coordination</div>
         </div>
       </main>
 
@@ -599,3 +446,4 @@ function Official() {
 }
 
 export default Official;
+
