@@ -16,7 +16,7 @@ const checklist = [
   'Review weather advisories and flood-prone routes.',
 ];
 
-export default function OverviewView({ reports, announcements, onNavigate, onSelectReport, onAnnounce }) {
+export default function OverviewView({ reports, announcements, announcementLoading, announcementError, onNavigate, onSelectReport, onAnnounce }) {
   const openReports = reports.filter((report) => !['Resolved', 'Closed'].includes(report.status)).length;
   const resolvedReports = reports.filter((report) => report.status === 'Resolved').length;
 
@@ -88,10 +88,12 @@ export default function OverviewView({ reports, announcements, onNavigate, onSel
           <button type="button" className="btn btn-outline" onClick={onAnnounce}>{icon('plus')} Announce</button>
         </div>
         <div className="stack">
-          {announcements.length === 0 ? <p className="empty">No announcements have been posted yet.</p> : announcements.slice(0, 3).map((item) => (
+          {announcementLoading && <p className="muted" role="status">Loading announcements…</p>}
+          {announcementError && <p className="form-error" role="alert">{announcementError}</p>}
+          {!announcementLoading && !announcementError && announcements.length === 0 ? <p className="empty">No announcements have been posted yet.</p> : announcements.slice(0, 3).map((item) => (
             <article key={item.id} className="list-item announcement-item">
               <strong>{item.title}</strong><p>{item.body}</p>
-              <small>Posted by {item.author} · {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(item.createdAt))}</small>
+              <small>Posted by {item.author} · {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(item.created_at ?? item.createdAt))}</small>
             </article>
           ))}
         </div>

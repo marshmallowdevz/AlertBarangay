@@ -1,12 +1,14 @@
 ﻿import { useEffect, useState } from 'react';
 import './Official.css';
-import { configError, isConfigured } from './supabaseClient';
+import { configError, isConfigured, supabase } from './supabaseClient';
 import { initialConversations, initialReports, initialResidents } from './dashboardData';
 import OverviewView from './OverviewView';
 import ReportsView from './ReportsView';
 import ResidentsView from './ResidentsView';
 import MessagesView from './MessagesView';
 import DispatchView from './DispatchView';
+import AnnouncementsView from './AnnouncementsView';
+import { createAnnouncement, listAnnouncements, subscribeToAnnouncements } from './announcementService';
 
 const iconMap = {
   overview: 'â—”',
@@ -53,7 +55,6 @@ const dashboardStorageKey = 'alertBarangay.dashboard';
 function readDashboardData() {
   const defaults = {
     profile: { name: 'Captain Dela Cruz', picture: '' },
-    announcements: [],
     error: '',
   };
 
@@ -64,13 +65,17 @@ function readDashboardData() {
         name: typeof savedData.profile?.name === 'string' ? savedData.profile.name : defaults.profile.name,
         picture: typeof savedData.profile?.picture === 'string' ? savedData.profile.picture : '',
       },
-      announcements: Array.isArray(savedData.announcements) ? savedData.announcements : [],
       error: '',
     };
   } catch (error) {
     console.error('Unable to load saved dashboard data.', error);
     return { ...defaults, error: 'Saved dashboard data could not be loaded from this browser.' };
   }
+}
+
+function mergeAnnouncements(current, incoming) {
+  const unique = new Map([...current, ...incoming].map((announcement) => [announcement.id, announcement]));
+  return [...unique.values()].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 }
 
 function Official() {
@@ -83,10 +88,15 @@ function Official() {
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [signedOut, setSignedOut] = useState(false);
+  const [signOutError, setSignOutError] = useState('');
   const [selectedReportId, setSelectedReportId] = useState('');
   const [initialData] = useState(readDashboardData);
   const [profile, setProfile] = useState(initialData.profile);
-  const [announcements, setAnnouncements] = useState(initialData.announcements);
+  const [announcements, setAnnouncements] = useState([]);
+  const [announcementLoading, setAnnouncementLoading] = useState(isConfigured);
+  const [announcementError, setAnnouncementError] = useState(isConfigured ? '' : configError);
+  const [postingAnnouncement, setPostingAnnouncement] = useState(false);
   const [storageError, setStorageError] = useState(initialData.error);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [announcementModalOpen, setAnnouncementModalOpen] = useState(false);
@@ -102,12 +112,34 @@ function Official() {
     return () => window.clearInterval(timer);
   }, []);
 
-  const saveDashboardData = (nextProfile, nextAnnouncements) => {
+  useEffect(() => {
+    let active = true;
+    if (!isConfigured) {
+      return () => { active = false; };
+    }
+
+    const unsubscribe = subscribeToAnnouncements(
+      (announcement) => { if (active) setAnnouncements((current) => mergeAnnouncements(current, [announcement])); },
+      (error) => { if (active) setAnnouncementError(error.message); },
+    );
+
+    listAnnouncements()
+      .then((rows) => { if (active) setAnnouncements((current) => mergeAnnouncements(current, rows)); })
+      .catch((error) => {
+        console.error('Unable to load shared announcements.', error);
+        if (active) setAnnouncementError('Announcements could not be loaded. Check your connection and try again.');
+      })
+      .finally(() => { if (active) setAnnouncementLoading(false); });
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
+
+  const saveDashboardData = (nextProfile) => {
     try {
-      window.localStorage.setItem(dashboardStorageKey, JSON.stringify({
-        profile: nextProfile,
-        announcements: nextAnnouncements,
-      }));
+      window.localStorage.setItem(dashboardStorageKey, JSON.stringify({ profile: nextProfile }));
       setStorageError('');
       return true;
     } catch (error) {
@@ -134,7 +166,7 @@ function Official() {
     }
 
     const nextProfile = { name, picture: profilePictureDraft };
-    if (saveDashboardData(nextProfile, announcements)) {
+    if (saveDashboardData(nextProfile)) {
       setProfile(nextProfile);
       setProfileModalOpen(false);
     }
@@ -165,7 +197,7 @@ function Official() {
     reader.readAsDataURL(file);
   };
 
-  const postAnnouncement = (event) => {
+  const postAnnouncement = async (event) => {
     event.preventDefault();
     const title = announcementTitle.trim();
     const body = announcementBody.trim();
@@ -174,22 +206,19 @@ function Official() {
       return;
     }
 
-    const nextAnnouncements = [
-      {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        title,
-        body,
-        author: profile.name,
-        createdAt: new Date().toISOString(),
-      },
-      ...announcements,
-    ];
-    if (saveDashboardData(profile, nextAnnouncements)) {
-      setAnnouncements(nextAnnouncements);
+    setPostingAnnouncement(true);
+    try {
+      const announcement = await createAnnouncement({ title, body, author: profile.name });
+      setAnnouncements((current) => mergeAnnouncements(current, [announcement]));
       setAnnouncementTitle('');
       setAnnouncementBody('');
       setFormError('');
       setAnnouncementModalOpen(false);
+    } catch (error) {
+      console.error('Unable to post shared announcement.', error);
+      setFormError('The announcement could not be shared. Check your connection and try again.');
+    } finally {
+      setPostingAnnouncement(false);
     }
   };
 
@@ -238,6 +267,43 @@ function Official() {
         : report),
     }));
   };
+
+  const handleSignOut = async () => {
+    let signOutMessage = '';
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) signOutMessage = 'The Supabase session could not be cleared. Contact an administrator if you used a signed-in account.';
+    } catch (error) {
+      console.error('Unable to clear the Supabase session.', error);
+      signOutMessage = 'The Supabase session could not be cleared. Contact an administrator if you used a signed-in account.';
+    }
+
+    try {
+      window.localStorage.removeItem(dashboardStorageKey);
+    } catch (error) {
+      console.error('Unable to clear the local profile.', error);
+      signOutMessage = `${signOutMessage} The saved profile could not be removed from this browser.`.trim();
+    }
+
+    setProfile({ name: '', picture: '' });
+    setSignOutError(signOutMessage);
+    setProfileOpen(false);
+    setProfileModalOpen(false);
+    setAnnouncementModalOpen(false);
+    setSignedOut(true);
+  };
+
+  if (signedOut) {
+    return (
+      <main className="logout-screen">
+        <div className="brand-logo">{renderIcon('shield', 24)}</div>
+        <h1>Signed out</h1>
+        <p>Your local dashboard session has ended.</p>
+        <p>This app does not currently include a sign-in screen.</p>
+        {signOutError && <p className="logout-error" role="alert">{signOutError}</p>}
+      </main>
+    );
+  }
 
   return (
     <div className="app">
@@ -326,6 +392,9 @@ function Official() {
                   <button type="button" className="dropdown-row" onClick={openProfileEditor}>
                     {renderIcon('settings', 16)} Edit profile
                   </button>
+                  <button type="button" className="dropdown-row danger" onClick={handleSignOut}>
+                    {renderIcon('logout', 16)} Sign out
+                  </button>
                 </div>
               )}
             </div>
@@ -347,6 +416,8 @@ function Official() {
             <OverviewView
               reports={operationalData.reports}
               announcements={announcements}
+              announcementLoading={announcementLoading}
+              announcementError={announcementError}
               onNavigate={navigateTo}
               onSelectReport={selectReport}
               onAnnounce={() => { setFormError(''); setAnnouncementModalOpen(true); }}
@@ -368,20 +439,7 @@ function Official() {
             <MessagesView conversations={operationalData.conversations} onReply={replyToConversation} />
           )}
           {activeNav === 'announcements' && (
-            <section className="card">
-              <div className="card-head">
-                <div><h2>Announcements</h2><p className="muted">Posts are currently saved in this browser.</p></div>
-                <button type="button" className="btn btn-maroon" onClick={() => { setFormError(''); setAnnouncementModalOpen(true); }}>+ Announce</button>
-              </div>
-              <div className="stack">
-                {announcements.length === 0 ? <p className="empty">No announcements yet.</p> : announcements.map((announcement) => (
-                  <article key={announcement.id} className="list-item announcement-item">
-                    <strong>{announcement.title}</strong><p>{announcement.body}</p>
-                    <small>Posted by {announcement.author} · {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(announcement.createdAt))}</small>
-                  </article>
-                ))}
-              </div>
-            </section>
+            <AnnouncementsView announcements={announcements} loading={announcementLoading} error={announcementError} onAnnounce={() => { setFormError(''); setAnnouncementModalOpen(true); }} />
           )}
           <div className="footer">Â© 2026 AlertBarangay â€¢ Built for faster local emergency coordination</div>
         </div>
@@ -428,7 +486,7 @@ function Official() {
         }}>
           <form className="modal" role="dialog" aria-modal="true" aria-labelledby="announcement-modal-title" onSubmit={postAnnouncement}>
             <h2 id="announcement-modal-title">Post an announcement</h2>
-            <p className="muted">Announcements are currently visible only in this browser.</p>
+            <p className="muted">Announcements are shared with everyone using this dashboard.</p>
             <label>
               Title
               <input
@@ -452,7 +510,7 @@ function Official() {
             {formError && <p className="form-error" role="alert">{formError}</p>}
             <div className="modal-actions">
               <button type="button" className="btn btn-outline" onClick={() => setAnnouncementModalOpen(false)}>Cancel</button>
-              <button type="submit" className="btn btn-maroon">Post announcement</button>
+              <button type="submit" className="btn btn-maroon" disabled={postingAnnouncement}>{postingAnnouncement ? 'Posting…' : 'Post announcement'}</button>
             </div>
           </form>
         </div>

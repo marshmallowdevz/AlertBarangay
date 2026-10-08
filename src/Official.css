@@ -333,6 +333,7 @@ label.toggle input { width: 18px; height: 18px; accent-color: var(--maroon); }
   gap: 14px; background: linear-gradient(180deg, var(--maroon), var(--maroon-dark)); color: #fff; text-align: center; padding: 24px;
 }
 .logout-screen p { opacity: 0.85; }
+.logout-screen .logout-error { max-width: 520px; color: #ffe0dc; opacity: 1; }
 
 /* ---------- Responsive ---------- */
 @media (max-width: 1200px) {
