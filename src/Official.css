@@ -203,7 +203,7 @@ nav { display: flex; flex-direction: column; gap: 6px; }
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 .type-tile { color: var(--maroon); cursor: pointer; }
-.type-tile > span:first-child { font-size: 1.25rem; }
+.type-tile > svg:first-child { width: 24px; height: 24px; }
 .type-tile:hover { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(201, 162, 39, 0.25); }
 
 .hotline {

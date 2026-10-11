@@ -32,7 +32,7 @@ export default function ReportsView({ reports, loading, error, onRetry, selected
       <section className="card">
         <div className="card-head">
           <div><h2>Community reports</h2><p className="muted">Reports submitted from this dashboard are shared with everyone.</p></div>
-          <div className="row-actions"><button type="button" className="btn btn-outline" onClick={onRetry} disabled={loading}>Refresh</button><button type="button" className="btn btn-maroon" onClick={() => setFormOpen(true)}>+ New report</button></div>
+          <div className="row-actions"><button type="button" className="btn btn-outline" onClick={onRetry} disabled={loading || !onRetry}>Refresh</button><button type="button" className="btn btn-maroon" onClick={() => setFormOpen(true)}>+ New report</button></div>
         </div>
         {error && <p className="form-error" role="alert">Reports could not be loaded: {error}</p>}
         {loading && <p className="muted" role="status">Loading community reports…</p>}

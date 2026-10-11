@@ -13,7 +13,7 @@ export default function AnnouncementsView({ announcements, loading, error, onRet
         <button type="button" className="btn btn-maroon" onClick={onAnnounce}>+ Announce</button>
       </div>
       {loading && <p className="muted" role="status">Loading announcements…</p>}
-      {error && <div className="error-row"><p className="form-error" role="alert">{error}</p><button type="button" className="btn btn-outline" onClick={onRetry} disabled={loading}>Retry</button></div>}
+      {error && <div className="error-row"><p className="form-error" role="alert">{error}</p>{onRetry && <button type="button" className="btn btn-outline" onClick={onRetry} disabled={loading}>Retry</button>}</div>}
       {!loading && !error && announcements.length === 0 && <p className="empty">No announcements have been posted yet.</p>}
       <div className="stack">
         {announcements.map((announcement) => (

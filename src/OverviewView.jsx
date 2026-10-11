@@ -87,7 +87,7 @@ export default function OverviewView({ reports, announcements, announcementLoadi
         </div>
         <div className="stack">
           {announcementLoading && <p className="muted" role="status">Loading announcements…</p>}
-          {announcementError && <div className="error-row"><p className="form-error" role="alert">{announcementError}</p><button type="button" className="link-btn" onClick={onRetryAnnouncements} disabled={announcementLoading}>Retry</button></div>}
+          {announcementError && <div className="error-row"><p className="form-error" role="alert">{announcementError}</p>{onRetryAnnouncements && <button type="button" className="link-btn" onClick={onRetryAnnouncements} disabled={announcementLoading}>Retry</button>}</div>}
           {!announcementLoading && !announcementError && announcements.length === 0 && <p className="empty">No announcements have been posted yet.</p>}
           {announcements.slice(0, 3).map((item) => (
             <article key={item.id} className="list-item announcement-item">

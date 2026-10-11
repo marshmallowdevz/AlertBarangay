@@ -404,7 +404,7 @@ function Official() {
               announcements={announcements}
               announcementLoading={announcementLoading}
               announcementError={announcementError}
-              onRetryAnnouncements={() => { setAnnouncementLoading(true); setAnnouncementError(''); setAnnouncementRetry((value) => value + 1); }}
+              onRetryAnnouncements={isConfigured ? () => { setAnnouncementLoading(true); setAnnouncementError(''); setAnnouncementRetry((value) => value + 1); } : undefined}
               onNavigate={navigateTo}
               onSelectReport={selectReport}
               onAnnounce={() => { setFormError(''); setAnnouncementModalOpen(true); }}
@@ -415,7 +415,7 @@ function Official() {
               reports={operationalData.reports}
               loading={reportsLoading}
               error={reportsError}
-              onRetry={() => { setReportsLoading(true); setReportsError(''); setReportsRetry((value) => value + 1); }}
+              onRetry={isConfigured ? () => { setReportsLoading(true); setReportsError(''); setReportsRetry((value) => value + 1); } : undefined}
               selectedReportId={selectedReportId}
               onSelectReport={setSelectedReportId}
               onCreateReport={createReport}
@@ -430,7 +430,7 @@ function Official() {
             <MessagesView conversations={operationalData.conversations} onReply={replyToConversation} />
           )}
           {activeNav === 'announcements' && (
-            <AnnouncementsView announcements={announcements} loading={announcementLoading} error={announcementError} onRetry={() => { setAnnouncementLoading(true); setAnnouncementError(''); setAnnouncementRetry((value) => value + 1); }} onAnnounce={() => { setFormError(''); setAnnouncementModalOpen(true); }} />
+            <AnnouncementsView announcements={announcements} loading={announcementLoading} error={announcementError} onRetry={isConfigured ? () => { setAnnouncementLoading(true); setAnnouncementError(''); setAnnouncementRetry((value) => value + 1); } : undefined} onAnnounce={() => { setFormError(''); setAnnouncementModalOpen(true); }} />
           )}
           <div className="footer">Â© 2026 AlertBarangay â€¢ Built for faster local emergency coordination</div>
         </div>
