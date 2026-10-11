@@ -208,7 +208,7 @@ function Official() {
       setAnnouncementModalOpen(false);
     } catch (error) {
       console.error('Unable to post shared announcement.', error);
-      setFormError('The announcement could not be shared. Check your connection and try again.');
+      setFormError(`The announcement could not be shared: ${error.message || 'An unexpected error occurred.'}`);
     } finally {
       setPostingAnnouncement(false);
     }
