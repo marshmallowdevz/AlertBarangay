@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import './Official.css';
-import { configError, isConfigured, supabase } from './supabaseClient';
+import { configError, isConfigured } from './supabaseClient';
 import { initialConversations, initialResidents } from './dashboardData';
 import OverviewView from './OverviewView';
 import ReportsView from './ReportsView';
@@ -10,7 +10,10 @@ import DispatchView from './DispatchView';
 import AnnouncementsView from './AnnouncementsView';
 import { createAnnouncement, listAnnouncements, subscribeToAnnouncements } from './announcementService';
 import Icon from './Icon';
-import { createReport as insertReport, listReports } from './reportService';
+import { createReport as insertReport, dispatchReport, listReports } from './reportService';
+import { getOrInitializeDashboardSettings, saveDashboardSettings } from './dashboardSettingsService';
+import { listNotifications, subscribeToNotifications } from './notificationService';
+import NotificationsView from './NotificationsView';
 
 const renderIcon = (name, size = 18) => <Icon name={name} size={size} />;
 
@@ -21,28 +24,17 @@ const navItems = [
   { id: 'residents', label: 'Residents', icon: 'residents', badge: null },
   { id: 'messages', label: 'Messages', icon: 'messages', badge: '3' },
   { id: 'announcements', label: 'Announcements', icon: 'bell', badge: null },
+  { id: 'notifications', label: 'Notifications', icon: 'bell', badge: null },
 ];
 
 const dashboardStorageKey = 'alertBarangay.dashboard';
+const defaultProfile = { name: 'Captain Dela Cruz', picture: '' };
 
-function readDashboardData() {
-  const defaults = {
-    profile: { name: 'Captain Dela Cruz', picture: '' },
-    error: '',
-  };
-
+function removeLegacyProfile() {
   try {
-    const savedData = JSON.parse(window.localStorage.getItem(dashboardStorageKey) || '{}') || {};
-    return {
-      profile: {
-        name: typeof savedData.profile?.name === 'string' ? savedData.profile.name : defaults.profile.name,
-        picture: typeof savedData.profile?.picture === 'string' ? savedData.profile.picture : '',
-      },
-      error: '',
-    };
+    window.localStorage.removeItem(dashboardStorageKey);
   } catch (error) {
-    console.error('Unable to load saved dashboard data.', error);
-    return { ...defaults, error: 'Saved dashboard data could not be loaded from this browser.' };
+    console.warn('The old browser profile could not be removed.', error);
   }
 }
 
@@ -61,15 +53,8 @@ function Official() {
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [authSession, setAuthSession] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [authEmail, setAuthEmail] = useState('');
-  const [authPassword, setAuthPassword] = useState('');
-  const [authSubmitting, setAuthSubmitting] = useState(false);
-  const [authError, setAuthError] = useState('');
   const [selectedReportId, setSelectedReportId] = useState('');
-  const [initialData] = useState(readDashboardData);
-  const [profile, setProfile] = useState(initialData.profile);
+  const [profile, setProfile] = useState(defaultProfile);
   const [announcements, setAnnouncements] = useState([]);
   const [announcementLoading, setAnnouncementLoading] = useState(isConfigured);
   const [announcementError, setAnnouncementError] = useState(isConfigured ? '' : configError);
@@ -77,65 +62,21 @@ function Official() {
   const [reportsLoading, setReportsLoading] = useState(isConfigured);
   const [reportsError, setReportsError] = useState(isConfigured ? '' : configError);
   const [reportsRetry, setReportsRetry] = useState(0);
+  const [notifications, setNotifications] = useState([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(isConfigured);
+  const [notificationsError, setNotificationsError] = useState(isConfigured ? '' : configError);
+  const [notificationsRetry, setNotificationsRetry] = useState(0);
+  const [profileError, setProfileError] = useState(isConfigured ? '' : configError);
   const [postingAnnouncement, setPostingAnnouncement] = useState(false);
-  const [storageError, setStorageError] = useState(initialData.error);
+  const [profileSaving, setProfileSaving] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [announcementModalOpen, setAnnouncementModalOpen] = useState(false);
-  const [profileNameDraft, setProfileNameDraft] = useState(initialData.profile.name);
-  const [profilePictureDraft, setProfilePictureDraft] = useState(initialData.profile.picture);
+  const [profileNameDraft, setProfileNameDraft] = useState(defaultProfile.name);
+  const [profilePictureDraft, setProfilePictureDraft] = useState(defaultProfile.picture);
   const [announcementTitle, setAnnouncementTitle] = useState('');
   const [announcementBody, setAnnouncementBody] = useState('');
   const [formError, setFormError] = useState('');
   const [now, setNow] = useState(() => new Date());
-
-  useEffect(() => {
-    if (!isConfigured) {
-      setAuthLoading(false);
-      return undefined;
-    }
-
-    let active = true;
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (active) setAuthSession(session);
-    });
-
-    supabase.auth.getSession()
-      .then(({ data, error }) => {
-        if (!active) return;
-        if (error) setAuthError('Your saved session could not be checked. Please sign in again.');
-        setAuthSession(data?.session ?? null);
-      })
-      .catch((error) => {
-        console.error('Unable to check the Supabase session.', error);
-        if (active) {
-          setAuthError('Your saved session could not be checked. Please sign in again.');
-          setAuthSession(null);
-        }
-      })
-      .finally(() => { if (active) setAuthLoading(false); });
-
-    return () => {
-      active = false;
-      subscription.unsubscribe();
-    };
-  }, []);
-
-  const handleLogin = async (event) => {
-    event.preventDefault();
-    if (!isConfigured || authSubmitting) return;
-
-    setAuthSubmitting(true);
-    setAuthError('');
-    try {
-      const { error } = await supabase.auth.signInWithPassword({ email: authEmail.trim(), password: authPassword });
-      if (error) setAuthError('Unable to sign in with those credentials. Check your email and password, then try again.');
-    } catch (error) {
-      console.error('Unable to sign in to the dashboard.', error);
-      setAuthError('Sign in is temporarily unavailable. Please try again.');
-    } finally {
-      setAuthSubmitting(false);
-    }
-  };
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
@@ -144,7 +85,39 @@ function Official() {
 
   useEffect(() => {
     let active = true;
-    if (!isConfigured || authLoading || !authSession) {
+    if (!isConfigured) return () => { active = false; };
+    let legacyProfile = defaultProfile;
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(dashboardStorageKey) || '{}');
+      if (typeof saved.profile?.name === 'string' && saved.profile.name.trim()) {
+        legacyProfile = {
+          name: saved.profile.name.trim(),
+          picture: typeof saved.profile.picture === 'string' ? saved.profile.picture : '',
+        };
+      }
+    } catch (error) {
+      console.warn('The old browser profile could not be read; using the shared default.', error);
+    }
+    getOrInitializeDashboardSettings(legacyProfile)
+      .then((settings) => {
+        if (!active) return;
+        const nextProfile = { name: settings.name, picture: settings.picture };
+        setProfile(nextProfile);
+        setProfileNameDraft(nextProfile.name);
+        setProfilePictureDraft(nextProfile.picture);
+        removeLegacyProfile();
+        setProfileError('');
+      })
+      .catch((error) => {
+        console.error('Unable to load the shared profile.', error);
+        if (active) setProfileError(`Shared profile could not be loaded: ${error.message || 'Check your Supabase connection.'}`);
+      });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    if (!isConfigured) {
       return () => { active = false; };
     }
 
@@ -165,11 +138,11 @@ function Official() {
       active = false;
       unsubscribe();
     };
-  }, [announcementRetry, authLoading, authSession]);
+  }, [announcementRetry]);
 
   useEffect(() => {
     let active = true;
-    if (!isConfigured || authLoading || !authSession) return () => { active = false; };
+    if (!isConfigured) return () => { active = false; };
 
     listReports()
       .then((rows) => { if (active) setOperationalData((current) => ({ ...current, reports: rows })); })
@@ -180,19 +153,28 @@ function Official() {
       .finally(() => { if (active) setReportsLoading(false); });
 
     return () => { active = false; };
-  }, [reportsRetry, authLoading, authSession]);
+  }, [reportsRetry]);
 
-  const saveDashboardData = (nextProfile) => {
-    try {
-      window.localStorage.setItem(dashboardStorageKey, JSON.stringify({ profile: nextProfile }));
-      setStorageError('');
-      return true;
-    } catch (error) {
-      console.error('Unable to save dashboard data.', error);
-      setStorageError('Changes could not be saved in this browser. Check available storage and try again.');
-      return false;
-    }
-  };
+  useEffect(() => {
+    let active = true;
+    if (!isConfigured) return () => { active = false; };
+    const mergeNotifications = (incoming) => setNotifications((current) => {
+      const unique = new Map([...current, ...incoming].map((item) => [item.id, item]));
+      return [...unique.values()].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 50);
+    });
+    const unsubscribe = subscribeToNotifications(
+      (notification) => { if (active) mergeNotifications([notification]); },
+      (error) => { if (active) setNotificationsError(error.message); },
+    );
+    listNotifications()
+      .then((rows) => { if (active) mergeNotifications(rows); })
+      .catch((error) => {
+        console.error('Unable to load shared notifications.', error);
+        if (active) setNotificationsError(error.message || 'Notifications could not be loaded.');
+      })
+      .finally(() => { if (active) setNotificationsLoading(false); });
+    return () => { active = false; unsubscribe(); };
+  }, [notificationsRetry]);
 
   const openProfileEditor = () => {
     setProfileNameDraft(profile.name);
@@ -202,7 +184,7 @@ function Official() {
     setProfileOpen(false);
   };
 
-  const saveProfile = (event) => {
+  const saveProfile = async (event) => {
     event.preventDefault();
     const name = profileNameDraft.trim();
     if (!name) {
@@ -211,9 +193,19 @@ function Official() {
     }
 
     const nextProfile = { name, picture: profilePictureDraft };
-    if (saveDashboardData(nextProfile)) {
-      setProfile(nextProfile);
+    setProfileSaving(true);
+    try {
+      const savedProfile = await saveDashboardSettings(nextProfile);
+      const persistedProfile = { name: savedProfile.name, picture: savedProfile.picture };
+      removeLegacyProfile();
+      setProfileError('');
+      setProfile(persistedProfile);
       setProfileModalOpen(false);
+    } catch (error) {
+      console.error('Unable to save the shared profile.', error);
+      setFormError(`Profile could not be saved: ${error.message || 'Check your Supabase connection.'}`);
+    } finally {
+      setProfileSaving(false);
     }
   };
 
@@ -290,78 +282,13 @@ function Official() {
     }));
   };
 
-  const dispatchResponse = ({ reportId, responseType, note }) => {
-    const dispatch = {
-      id: `DSP-${Date.now()}`,
-      reportId,
-      responseType,
-      note,
-      createdAt: new Date().toISOString(),
-    };
-    setOperationalData((current) => ({
-      ...current,
-      dispatches: [dispatch, ...current.dispatches],
-      reports: current.reports.map((report) => report.id === reportId
-        ? { ...report, status: 'Assigned', dispatchHistory: [...report.dispatchHistory, dispatch] }
-        : report),
-    }));
+  const dispatchResponse = async ({ reportId, responseType, note }) => {
+    const report = operationalData.reports.find((item) => item.id === reportId);
+    if (!report) throw new Error('That report could not be found. Refresh the report list and try again.');
+    await dispatchReport({ reportId: report.databaseId, responseType, note });
+    const rows = await listReports();
+    setOperationalData((current) => ({ ...current, reports: rows }));
   };
-
-  const handleSignOut = async () => {
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) console.error('Unable to clear the Supabase session.', error);
-    } catch (error) {
-      console.error('Unable to clear the Supabase session.', error);
-    }
-
-    try {
-      window.localStorage.removeItem(dashboardStorageKey);
-    } catch (error) {
-      console.error('Unable to clear the local profile.', error);
-    }
-
-    setProfile({ name: '', picture: '' });
-    setProfileOpen(false);
-    setProfileModalOpen(false);
-    setAnnouncementModalOpen(false);
-    window.location.assign('/');
-  };
-
-  if (authLoading) {
-    return <main className="auth-loading">Checking your session...</main>;
-  }
-
-  if (!authSession) {
-    return (
-      <main className="auth">
-        <section className="auth-side">
-          <div className="brand-logo">{renderIcon('shield', 24)}</div>
-          <h1>AlertBarangay</h1>
-          <p>Sign in with your existing dashboard account to continue.</p>
-        </section>
-        <section className="auth-main">
-          <form className="auth-card" onSubmit={handleLogin}>
-            <h2>Dashboard sign in</h2>
-            {!isConfigured && <p className="form-error" role="alert">{configError}</p>}
-            <label>
-              Email
-              <input type="email" autoComplete="username" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} required />
-            </label>
-            <label>
-              Password
-              <input type="password" autoComplete="current-password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} required />
-            </label>
-            {authError && <p className="form-error" role="alert">{authError}</p>}
-            <button type="submit" className="btn btn-maroon" disabled={!isConfigured || authSubmitting}>
-              {authSubmitting ? 'Signing in...' : 'Sign in'}
-            </button>
-            <p className="muted">Accounts are managed by your dashboard administrator.</p>
-          </form>
-        </section>
-      </main>
-    );
-  }
 
   return (
     <div className="app">
@@ -450,9 +377,6 @@ function Official() {
                   <button type="button" className="dropdown-row" onClick={openProfileEditor}>
                     {renderIcon('settings', 16)} Edit profile
                   </button>
-                  <button type="button" className="dropdown-row danger" onClick={handleSignOut}>
-                    {renderIcon('logout', 16)} Sign out
-                  </button>
                 </div>
               )}
             </div>
@@ -460,7 +384,7 @@ function Official() {
         </header>
 
         <div className="content" aria-live="polite">
-          {storageError && <div className="card form-error" role="alert">{storageError}</div>}
+          {profileError && <div className="card form-error" role="alert">{profileError}</div>}
           {!isConfigured && (
             <div className="card" style={{ borderColor: '#f0d88c', background: '#fffaf0' }}>
               <div className="card-head">
@@ -495,7 +419,7 @@ function Official() {
             />
           )}
           {activeNav === 'dispatch' && (
-            <DispatchView reports={operationalData.reports} dispatches={operationalData.dispatches} onDispatch={dispatchResponse} />
+            <DispatchView reports={operationalData.reports} dispatches={operationalData.reports.flatMap((report) => report.dispatchHistory.filter((event) => event.eventType === 'dispatched').map((event) => ({ ...event, reportId: report.id }))).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))} onDispatch={dispatchResponse} />
           )}
           {activeNav === 'residents' && <ResidentsView residents={operationalData.residents} />}
           {activeNav === 'messages' && (
@@ -503,6 +427,9 @@ function Official() {
           )}
           {activeNav === 'announcements' && (
             <AnnouncementsView announcements={announcements} loading={announcementLoading} error={announcementError} onRetry={isConfigured ? () => { setAnnouncementLoading(true); setAnnouncementError(''); setAnnouncementRetry((value) => value + 1); } : undefined} onAnnounce={() => { setFormError(''); setAnnouncementModalOpen(true); }} />
+          )}
+          {activeNav === 'notifications' && (
+            <NotificationsView notifications={notifications} loading={notificationsLoading} error={notificationsError} onRetry={isConfigured ? () => { setNotificationsLoading(true); setNotificationsError(''); setNotificationsRetry((value) => value + 1); } : undefined} />
           )}
           <div className="footer">Â© 2026 AlertBarangay â€¢ Built for faster local emergency coordination</div>
         </div>
@@ -514,7 +441,7 @@ function Official() {
         }}>
           <form className="modal" role="dialog" aria-modal="true" aria-labelledby="profile-modal-title" onSubmit={saveProfile}>
             <h2 id="profile-modal-title">Edit profile</h2>
-            <p className="muted">Profile changes are saved in this browser.</p>
+            <p className="muted">Profile changes are shared with everyone using this dashboard.</p>
             <div className="profile-picture-editor">
               <span className="avatar avatar-large">
                 {profilePictureDraft ? <img src={profilePictureDraft} alt="Profile preview" /> : renderIcon('residents', 28)}
@@ -537,7 +464,7 @@ function Official() {
             {formError && <p className="form-error" role="alert">{formError}</p>}
             <div className="modal-actions">
               <button type="button" className="btn btn-outline" onClick={() => setProfileModalOpen(false)}>Cancel</button>
-              <button type="submit" className="btn btn-maroon">Save profile</button>
+              <button type="submit" className="btn btn-maroon" disabled={profileSaving}>{profileSaving ? 'Saving...' : 'Save profile'}</button>
             </div>
           </form>
         </div>

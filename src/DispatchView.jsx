@@ -10,31 +10,44 @@ export default function DispatchView({ reports, dispatches, onDispatch }) {
   const [note, setNote] = useState('');
   const [formError, setFormError] = useState('');
   const [confirmation, setConfirmation] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  const submitDispatch = (event) => {
+  const selectedReportId = dispatchableReports.some((report) => report.id === reportId)
+    ? reportId
+    : dispatchableReports[0]?.id ?? '';
+
+  const submitDispatch = async (event) => {
     event.preventDefault();
-    if (!reportId || !responseType) {
+    if (!selectedReportId || !responseType) {
       setFormError('Choose an open report and a response type before dispatching.');
       return;
     }
-    const selectedReport = dispatchableReports.find((report) => report.id === reportId);
+    const selectedReport = dispatchableReports.find((report) => report.id === selectedReportId);
     if (!selectedReport) {
       setFormError('That report is no longer available for dispatch.');
       return;
     }
-    onDispatch({ reportId, responseType, note: note.trim() });
-    setConfirmation(`${responseType} response assigned to ${selectedReport.id}.`);
-    setNote('');
+    setSaving(true);
+    setConfirmation('');
     setFormError('');
+    try {
+      await onDispatch({ reportId: selectedReportId, responseType, note: note.trim() });
+      setConfirmation(`${responseType} response assigned to ${selectedReport.id}.`);
+      setNote('');
+    } catch (error) {
+      setFormError(error.message || 'The response could not be saved. Refresh and try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <div className="dispatch-grid">
       <section className="card">
-        <div className="card-head"><div><h2>Dispatch a response</h2><p className="muted">Choose the response needed for an open sample report.</p></div></div>
+        <div className="card-head"><div><h2>Dispatch a response</h2><p className="muted">Choose the response needed for a shared open report.</p></div></div>
         {dispatchableReports.length === 0 ? <p className="empty">There are no open reports to dispatch.</p> : (
           <form className="settings-form" onSubmit={submitDispatch}>
-            <label>Report<select value={reportId} onChange={(event) => setReportId(event.target.value)} required>
+            <label>Report<select value={selectedReportId} onChange={(event) => setReportId(event.target.value)} required>
               {dispatchableReports.map((report) => <option key={report.id} value={report.id}>{report.id} · {report.type} · {report.location}</option>)}
             </select></label>
             <label>Response type<select value={responseType} onChange={(event) => setResponseType(event.target.value)} required>
@@ -43,12 +56,12 @@ export default function DispatchView({ reports, dispatches, onDispatch }) {
             <label>Dispatch note (optional)<textarea rows="4" maxLength={500} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Add instructions for the responding team" /></label>
             {formError && <p className="form-error" role="alert">{formError}</p>}
             {confirmation && <p className="form-notice" role="status">{confirmation}</p>}
-            <button type="submit" className="btn btn-maroon">Dispatch response</button>
+            <button type="submit" className="btn btn-maroon" disabled={saving}>{saving ? 'Saving...' : 'Dispatch response'}</button>
           </form>
         )}
       </section>
       <section className="card">
-        <div className="card-head"><div><h2>Recent dispatches</h2><p className="muted">Sample dispatch actions are kept for this session.</p></div></div>
+        <div className="card-head"><div><h2>Recent dispatches</h2><p className="muted">Dispatch records are shared and saved.</p></div></div>
         <div className="stack">
           {dispatches.length === 0 ? <p className="empty">No responses dispatched yet.</p> : dispatches.map((dispatch) => (
             <article key={dispatch.id} className="list-item">
