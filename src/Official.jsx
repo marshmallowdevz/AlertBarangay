@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import './Official.css';
 import { configError, isConfigured, supabase } from './supabaseClient';
 import { initialConversations, initialResidents } from './dashboardData';
@@ -61,8 +61,12 @@ function Official() {
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [signedOut, setSignedOut] = useState(false);
-  const [signOutError, setSignOutError] = useState('');
+  const [authSession, setAuthSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authSubmitting, setAuthSubmitting] = useState(false);
+  const [authError, setAuthError] = useState('');
   const [selectedReportId, setSelectedReportId] = useState('');
   const [initialData] = useState(readDashboardData);
   const [profile, setProfile] = useState(initialData.profile);
@@ -85,13 +89,62 @@ function Official() {
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
+    if (!isConfigured) {
+      setAuthLoading(false);
+      return undefined;
+    }
+
+    let active = true;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (active) setAuthSession(session);
+    });
+
+    supabase.auth.getSession()
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (error) setAuthError('Your saved session could not be checked. Please sign in again.');
+        setAuthSession(data?.session ?? null);
+      })
+      .catch((error) => {
+        console.error('Unable to check the Supabase session.', error);
+        if (active) {
+          setAuthError('Your saved session could not be checked. Please sign in again.');
+          setAuthSession(null);
+        }
+      })
+      .finally(() => { if (active) setAuthLoading(false); });
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleLogin = async (event) => {
+    event.preventDefault();
+    if (!isConfigured || authSubmitting) return;
+
+    setAuthSubmitting(true);
+    setAuthError('');
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email: authEmail.trim(), password: authPassword });
+      if (error) setAuthError('Unable to sign in with those credentials. Check your email and password, then try again.');
+    } catch (error) {
+      console.error('Unable to sign in to the dashboard.', error);
+      setAuthError('Sign in is temporarily unavailable. Please try again.');
+    } finally {
+      setAuthSubmitting(false);
+    }
+  };
+
+  useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
     let active = true;
-    if (!isConfigured) {
+    if (!isConfigured || authLoading || !authSession) {
       return () => { active = false; };
     }
 
@@ -112,11 +165,11 @@ function Official() {
       active = false;
       unsubscribe();
     };
-  }, [announcementRetry]);
+  }, [announcementRetry, authLoading, authSession]);
 
   useEffect(() => {
     let active = true;
-    if (!isConfigured) return () => { active = false; };
+    if (!isConfigured || authLoading || !authSession) return () => { active = false; };
 
     listReports()
       .then((rows) => { if (active) setOperationalData((current) => ({ ...current, reports: rows })); })
@@ -127,7 +180,7 @@ function Official() {
       .finally(() => { if (active) setReportsLoading(false); });
 
     return () => { active = false; };
-  }, [reportsRetry]);
+  }, [reportsRetry, authLoading, authSession]);
 
   const saveDashboardData = (nextProfile) => {
     try {
@@ -255,38 +308,57 @@ function Official() {
   };
 
   const handleSignOut = async () => {
-    let signOutMessage = '';
     try {
       const { error } = await supabase.auth.signOut();
-      if (error) signOutMessage = 'The Supabase session could not be cleared. Contact an administrator if you used a signed-in account.';
+      if (error) console.error('Unable to clear the Supabase session.', error);
     } catch (error) {
       console.error('Unable to clear the Supabase session.', error);
-      signOutMessage = 'The Supabase session could not be cleared. Contact an administrator if you used a signed-in account.';
     }
 
     try {
       window.localStorage.removeItem(dashboardStorageKey);
     } catch (error) {
       console.error('Unable to clear the local profile.', error);
-      signOutMessage = `${signOutMessage} The saved profile could not be removed from this browser.`.trim();
     }
 
     setProfile({ name: '', picture: '' });
-    setSignOutError(signOutMessage);
     setProfileOpen(false);
     setProfileModalOpen(false);
     setAnnouncementModalOpen(false);
-    setSignedOut(true);
+    window.location.assign('/');
   };
 
-  if (signedOut) {
+  if (authLoading) {
+    return <main className="auth-loading">Checking your session...</main>;
+  }
+
+  if (!authSession) {
     return (
-      <main className="logout-screen">
-        <div className="brand-logo">{renderIcon('shield', 24)}</div>
-        <h1>Signed out</h1>
-        <p>Your local dashboard session has ended.</p>
-        <p>This app does not currently include a sign-in screen.</p>
-        {signOutError && <p className="logout-error" role="alert">{signOutError}</p>}
+      <main className="auth">
+        <section className="auth-side">
+          <div className="brand-logo">{renderIcon('shield', 24)}</div>
+          <h1>AlertBarangay</h1>
+          <p>Sign in with your existing dashboard account to continue.</p>
+        </section>
+        <section className="auth-main">
+          <form className="auth-card" onSubmit={handleLogin}>
+            <h2>Dashboard sign in</h2>
+            {!isConfigured && <p className="form-error" role="alert">{configError}</p>}
+            <label>
+              Email
+              <input type="email" autoComplete="username" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} required />
+            </label>
+            <label>
+              Password
+              <input type="password" autoComplete="current-password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} required />
+            </label>
+            {authError && <p className="form-error" role="alert">{authError}</p>}
+            <button type="submit" className="btn btn-maroon" disabled={!isConfigured || authSubmitting}>
+              {authSubmitting ? 'Signing in...' : 'Sign in'}
+            </button>
+            <p className="muted">Accounts are managed by your dashboard administrator.</p>
+          </form>
+        </section>
       </main>
     );
   }
