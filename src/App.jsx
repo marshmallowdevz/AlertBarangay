@@ -6,6 +6,10 @@ import {
 } from "lucide-react";
 import { supabase, isConfigured, configError } from "./supabaseClient";
 import "./App.css";
+import "./landing.css";
+import MediaPicker, { ReportMedia } from "./MediaPicker";
+import { getCurrentAddress } from "./location";
+import { uploadReportMedia } from "./media";
 
 const HOTLINE = "(02) 8123-4567";
 const HOTLINE_TEL = "tel:0281234567";
@@ -69,6 +73,7 @@ const toReport = (row, userId) => ({
   location: row.location,
   severity: row.severity,
   description: row.description,
+  media: row.media_urls || [],
   status: row.status,
   date: fmtDate(row.created_at),
   mine: row.user_id === userId,
@@ -210,10 +215,19 @@ export default function App() {
   };
 
   // Returns an error message (shown in the form) or null when it worked.
-  const submitReport = async ({ type, location, severity, description }) => {
+  const submitReport = async ({ type, location, severity, description, mediaFiles }) => {
+    let media_urls = [];
+    if (mediaFiles && mediaFiles.length > 0) {
+      try {
+        media_urls = await uploadReportMedia(supabase, userId, mediaFiles);
+      } catch {
+        return "Could not upload your photos or videos. Check your connection and try again.";
+      }
+    }
+
     const { error } = await supabase
       .from("reports")
-      .insert({ type, location, severity, description });
+      .insert({ type, location, severity, description, media_urls });
     if (error) return "Could not submit your report. Please try again.";
 
     await supabase
@@ -328,8 +342,8 @@ export default function App() {
             <Menu size={22} />
           </button>
           <div className="welcome">
-            <h1>Welcome back, {user.name}! 👋</h1>
-            <p>Let's keep our barangay safe and prepared.</p>
+            <h1>Welcome back, {user.name}! </h1>
+            <p>Your safety starts with awareness.</p>
           </div>
 
           <div className="topbar-right">
@@ -542,7 +556,7 @@ export default function App() {
             <SettingsPage user={user} onSave={(name) => saveSettings(name)} />
           )}
 
-          <footer className="footer">© 2025 AlertBarangay. All rights reserved.</footer>
+          <footer className="footer">© 2026 AlertBarangay. All rights reserved.</footer>
         </main>
       </div>
 
@@ -599,26 +613,9 @@ function DashboardPage({ reports, myCount, inProgress, resolved, unread, goTo, o
             </a>
             <p className="available">Available 24/7</p>
           </section>
-
-          <section className="card">
-            <h2><ShieldCheck size={18} /> Safety Reminder</h2>
-            <ul className="reminder">
-              <li>Stay alert and aware of your surroundings.</li>
-              <li>Report emergencies immediately.</li>
-              <li>Let's work together for a safer barangay.</li>
-            </ul>
-            <p className="motto">“Bayanihan at Malasakit,<br />Kaligtasan ay Makakamtan.”</p>
-          </section>
         </div>
       </div>
 
-      <section className="card">
-        <div className="card-head">
-          <h2>Your Recent Reports</h2>
-          <button className="link-btn" onClick={() => goTo("reports")}>View All</button>
-        </div>
-        <ReportTable rows={reports.slice(0, 3)} empty="You haven't submitted any reports yet." />
-      </section>
     </>
   );
 }
@@ -676,6 +673,7 @@ function ReportTable({ rows, onCancel, empty }) {
                   <tr className="detail-row">
                     <td colSpan={6}>
                       <p><strong>What happened:</strong> {r.description || "No description provided."}</p>
+                      <ReportMedia urls={r.media} />
                       <p className="history-title"><strong>Status history</strong></p>
                       <ul className="history-list">
                         {r.history.map((h, i) => (
@@ -702,8 +700,10 @@ function ReportModal({ type, onClose, onSubmit }) {
   const [location, setLocation] = useState("");
   const [severity, setSeverity] = useState("Medium");
   const [description, setDescription] = useState("");
+  const [mediaFiles, setMediaFiles] = useState([]);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [locating, setLocating] = useState(false);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -713,18 +713,21 @@ function ReportModal({ type, onClose, onSubmit }) {
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const fillCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      setError("Your browser does not support location.");
-      return;
+  const fillCurrentLocation = async () => {
+    setError("");
+    setLocating(true);
+    try {
+      const { address } = await getCurrentAddress();
+      if (address) {
+        setLocation(address);
+      } else {
+        setError("We found you, but not the street name. Please type your location.");
+      }
+    } catch {
+      setError("Could not get your location. Allow location access or type it in.");
+    } finally {
+      setLocating(false);
     }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLocation(`${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`);
-        setError("");
-      },
-      () => setError("Could not get your location. Please type it in.")
-    );
   };
 
   const handleSubmit = async (e) => {
@@ -744,6 +747,7 @@ function ReportModal({ type, onClose, onSubmit }) {
       location: location.trim(),
       severity,
       description: description.trim(),
+      mediaFiles,
     });
     if (problem) {
       setError(problem);
@@ -770,8 +774,13 @@ function ReportModal({ type, onClose, onSubmit }) {
             autoFocus
           />
         </label>
-        <button type="button" className="link-btn" onClick={fillCurrentLocation}>
-          <MapPin size={14} /> Use my current location
+        <button
+          type="button"
+          className="link-btn"
+          onClick={fillCurrentLocation}
+          disabled={locating}
+        >
+          <MapPin size={14} /> {locating ? "Finding your address…" : "Use my current location"}
         </button>
 
         <label>
@@ -792,6 +801,13 @@ function ReportModal({ type, onClose, onSubmit }) {
             placeholder="Describe the situation"
           />
         </label>
+
+        <MediaPicker
+          files={mediaFiles}
+          onChange={setMediaFiles}
+          onError={setError}
+          disabled={submitting}
+        />
 
         {error && <p className="form-error">{error}</p>}
         {severity === "High" && (
@@ -934,6 +950,9 @@ function AuthScreen() {
 
       <div className="auth-main">
         <form className="auth-card" onSubmit={handleSubmit}>
+          <div className="auth-mark"><Shield size={23} /></div>
+          <p className="auth-eyebrow">ALERTBARANGAY RESIDENT PORTAL</p>
+          <p className="auth-description">{isSignup ? "Join your community and stay informed." : "Log in to continue to your account."}</p>
           <div className="auth-tabs" role="tablist">
             <button
               type="button"
@@ -1008,7 +1027,7 @@ function AuthScreen() {
           {error && <p className="form-error">{error}</p>}
           {notice && <p className="form-notice">{notice}</p>}
 
-          <button type="submit" className="btn btn-maroon" disabled={busy}>
+          <button type="submit" className="btn btn-maroon auth-submit" disabled={busy}>
             {busy ? "Please wait…" : isSignup ? "Create account" : "Log in"}
           </button>
 

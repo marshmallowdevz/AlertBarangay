@@ -364,3 +364,112 @@ td.row-actions > * { margin-right: 12px; }
   .auth-side { padding: 28px 24px; }
   .auth-side h1 { font-size: 1.6rem; }
 }
+
+/* Auth refresh: split card over the community photo backdrop. */
+.auth {
+  position: relative;
+  min-height: 100vh;
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  padding: clamp(18px, 5vw, 64px);
+  isolation: isolate;
+  background: #d9d5cd;
+}
+.auth::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(120deg, rgba(28, 20, 22, .28), rgba(31, 18, 31, .12)),
+    url("/barangay-background.png") center 48% / cover no-repeat,
+    linear-gradient(135deg, #ddd9d1, #aea8a0);
+}
+.auth-side {
+  position: relative;
+  overflow: hidden;
+  min-height: 560px;
+  padding: clamp(30px, 5vw, 64px);
+  justify-content: flex-end;
+  background: linear-gradient(0deg, rgba(54, 12, 27, .88), rgba(54, 12, 27, .08) 75%),
+    url("/barangay-background.png") center / cover no-repeat,
+    linear-gradient(145deg, #8b344a, #35111e);
+}
+.auth-side h1 { max-width: 420px; font-size: clamp(2rem, 4vw, 3.1rem); line-height: 1.08; }
+.auth-side .brand-logo { margin-bottom: 2px; }
+.auth-side p { max-width: 400px; }
+.auth-side .motto-light { color: #ffe7ad; }
+.auth-main { min-width: 0; padding: clamp(24px, 5vw, 64px); background: #fff; }
+.auth-card {
+  max-width: 430px;
+  padding: 8px 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  gap: 15px;
+}
+.auth-mark { display: grid; place-items: center; width: 42px; height: 42px; margin: 0 auto; border-radius: 14px; color: white; background: var(--maroon); }
+.auth-eyebrow { margin: 0; text-align: center; color: var(--muted); font-size: .68rem; font-weight: 700; letter-spacing: .13em; }
+.auth-card h2 { text-align: center; color: #201b1b; font-size: 1.55rem; }
+.auth-description { margin: -9px 0 0; text-align: center; color: var(--muted); font-size: .88rem; }
+.auth-tabs { margin: 2px 0 4px; background: #f4efed; }
+.auth-tabs button.active { color: var(--maroon); }
+.auth-card label { color: #625b5a; font-size: .8rem; font-weight: 500; gap: 7px; }
+.auth-card input { min-height: 44px; border-color: #e2dcda; border-radius: 7px; font-size: .88rem; }
+.auth-card input:focus { outline-color: var(--maroon-soft); border-color: var(--maroon-soft); }
+.auth-submit { width: 100%; min-height: 46px; border-radius: 8px; background: var(--maroon-soft); }
+.auth-switch { font-size: .84rem; }
+
+@media (min-width: 801px) {
+  .auth { grid-template-columns: minmax(300px, 1fr) minmax(380px, 1fr); width: min(1040px, calc(100% - 48px)); min-height: min(720px, calc(100vh - 64px)); margin: 32px auto; padding: 0; border: 5px solid rgba(67, 22, 44, .96); border-radius: 28px; overflow: hidden; box-shadow: 0 24px 80px rgba(0, 0, 0, .28); }
+  .auth-side { min-height: 580px; }
+  .auth-main { padding: 42px clamp(28px, 5vw, 70px); }
+}
+@media (max-width: 800px) {
+  .auth { width: auto; margin: 0; padding: 16px; border: 0; border-radius: 0; overflow: visible; background: transparent; }
+  .auth-side { min-height: 190px; padding: 22px; gap: 8px; }
+  .auth-side h1 { font-size: 1.7rem; }
+  .auth-side p { font-size: .85rem; }
+  .auth-side .motto-light { display: none; }
+  .auth-main { padding: 28px 22px; }
+  .auth-card { padding: 0; }
+}
+n
+
+/* ---------- Mobile polish (phone + APK) ---------- */
+
+/* Use the real visible height on phones */
+.app, .auth, .logout-screen, .auth-loading { min-height: 100dvh; }
+
+/* Keep content clear of the phone notch and bottom bar (needed for the APK) */
+.topbar { padding-top: max(16px, env(safe-area-inset-top)); }
+.footer { padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+.toast { bottom: max(24px, env(safe-area-inset-bottom)); max-width: 90vw; text-align: center; }
+
+@media (max-width: 900px) {
+  /* FIX: notification dropdown was going off-screen */
+  .notif-dropdown {
+    top: 72px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+  }
+  .modal { max-width: 100%; }
+}
+
+@media (max-width: 560px) {
+  /* Stat cards in 2 columns instead of 1 long list */
+  .stats { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .stat-card { padding: 14px; gap: 10px; flex-direction: column; align-items: flex-start; }
+  .stat-icon { width: 42px; height: 42px; }
+  .stat-text strong { font-size: 1.4rem; }
+
+  .card { padding: 18px 16px; }
+  .type-tile { height: 96px; }
+  .hotline strong { font-size: 1.05rem; }
+  .bell-btn { width: 40px; height: 40px; }
+  .welcome p { font-size: 0.8rem; }
+
+  /* 16px stops iPhones from zooming in when you tap a field */
+  input, select, textarea { font-size: 16px; }
+}
