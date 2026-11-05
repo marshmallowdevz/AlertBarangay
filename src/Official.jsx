@@ -10,7 +10,15 @@ import AnnouncementsView from './AnnouncementsView';
 import { createAnnouncement, listAnnouncements, subscribeToAnnouncements } from './announcementService';
 import Icon from './Icon';
 import { dispatchReport, listReports } from './reportService';
-import { getOrInitializeDashboardSettings, saveDashboardSettings } from './dashboardSettingsService';
+import {
+  getOrInitializeDashboardContacts,
+  getOrInitializeDashboardProfile,
+  getOrInitializeSharedDashboardProfile,
+  saveDashboardContacts,
+  saveDashboardProfile,
+  saveSharedDashboardProfile,
+  subscribeToDashboardContacts,
+} from './dashboardSettingsService';
 import { listNotifications, subscribeToNotifications } from './notificationService';
 import NotificationsView from './NotificationsView';
 
@@ -25,15 +33,21 @@ const navItems = [
   { id: 'notifications', label: 'Notifications', icon: 'bell', badge: null },
 ];
 
-const dashboardStorageKey = 'alertBarangay.dashboard';
-const defaultProfile = { name: 'Captain Dela Cruz', picture: '' };
+const defaultContacts = { emergency_phone: '911', call_center_phone: '0917-123-4567' };
+const defaultSharedProfile = { name: 'Captain Dela Cruz', picture: '' };
 
-function removeLegacyProfile() {
-  try {
-    window.localStorage.removeItem(dashboardStorageKey);
-  } catch (error) {
-    console.warn('The old browser profile could not be removed.', error);
-  }
+function getFallbackProfile(user) {
+  if (!user) return defaultSharedProfile;
+  const metadataName = typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name.trim() : '';
+  const emailName = typeof user.email === 'string' ? user.email.split('@')[0].trim() : '';
+  return {
+    name: metadataName || emailName || 'Official User',
+    picture: '',
+  };
+}
+
+function toTelHref(phone) {
+  return `tel:${phone.replace(/[^\d+]/g, '')}`;
 }
 
 function mergeAnnouncements(current, incoming) {
@@ -41,7 +55,7 @@ function mergeAnnouncements(current, incoming) {
   return [...unique.values()].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 }
 
-function Official() {
+function Official({ user, onSignOut }) {
   const [activeNav, setActiveNav] = useState('overview');
   const [operationalData, setOperationalData] = useState({
     reports: [],
@@ -51,7 +65,8 @@ function Official() {
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [profile, setProfile] = useState(defaultProfile);
+  const [profile, setProfile] = useState(() => getFallbackProfile(user));
+  const [sharedContacts, setSharedContacts] = useState(defaultContacts);
   const [announcements, setAnnouncements] = useState([]);
   const [announcementLoading, setAnnouncementLoading] = useState(isConfigured);
   const [announcementError, setAnnouncementError] = useState(isConfigured ? '' : configError);
@@ -61,12 +76,18 @@ function Official() {
   const [notificationsError, setNotificationsError] = useState(isConfigured ? '' : configError);
   const [notificationsRetry, setNotificationsRetry] = useState(0);
   const [profileError, setProfileError] = useState(isConfigured ? '' : configError);
+  const [contactsError, setContactsError] = useState(isConfigured ? '' : configError);
   const [postingAnnouncement, setPostingAnnouncement] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
+  const [contactsSaving, setContactsSaving] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [contactsModalOpen, setContactsModalOpen] = useState(false);
   const [announcementModalOpen, setAnnouncementModalOpen] = useState(false);
-  const [profileNameDraft, setProfileNameDraft] = useState(defaultProfile.name);
-  const [profilePictureDraft, setProfilePictureDraft] = useState(defaultProfile.picture);
+  const [profileNameDraft, setProfileNameDraft] = useState(() => getFallbackProfile(user).name);
+  const [profilePictureDraft, setProfilePictureDraft] = useState('');
+  const [emergencyPhoneDraft, setEmergencyPhoneDraft] = useState(defaultContacts.emergency_phone);
+  const [callCenterPhoneDraft, setCallCenterPhoneDraft] = useState(defaultContacts.call_center_phone);
+  const [contactsFormError, setContactsFormError] = useState('');
   const [announcementTitle, setAnnouncementTitle] = useState('');
   const [announcementBody, setAnnouncementBody] = useState('');
   const [formError, setFormError] = useState('');
@@ -80,34 +101,49 @@ function Official() {
   useEffect(() => {
     let active = true;
     if (!isConfigured) return () => { active = false; };
-    let legacyProfile = defaultProfile;
-    try {
-      const saved = JSON.parse(window.localStorage.getItem(dashboardStorageKey) || '{}');
-      if (typeof saved.profile?.name === 'string' && saved.profile.name.trim()) {
-        legacyProfile = {
-          name: saved.profile.name.trim(),
-          picture: typeof saved.profile.picture === 'string' ? saved.profile.picture : '',
-        };
-      }
-    } catch (error) {
-      console.warn('The old browser profile could not be read; using the shared default.', error);
-    }
-    getOrInitializeDashboardSettings(legacyProfile)
-      .then((settings) => {
+
+    const unsubscribeContacts = subscribeToDashboardContacts(
+      (settings) => {
+        if (active) {
+          setSharedContacts((current) => !current.updated_at || new Date(settings.updated_at) >= new Date(current.updated_at) ? settings : current);
+          setContactsError('');
+        }
+      },
+      (error) => { if (active) setContactsError(error.message); },
+    );
+
+    const loadProfile = user ? getOrInitializeDashboardProfile(user) : getOrInitializeSharedDashboardProfile();
+    loadProfile
+      .then((savedProfile) => {
         if (!active) return;
-        const nextProfile = { name: settings.name, picture: settings.picture };
+        const nextProfile = { name: savedProfile.name, picture: savedProfile.picture };
         setProfile(nextProfile);
         setProfileNameDraft(nextProfile.name);
         setProfilePictureDraft(nextProfile.picture);
-        removeLegacyProfile();
         setProfileError('');
       })
       .catch((error) => {
-        console.error('Unable to load the shared profile.', error);
-        if (active) setProfileError(`Shared profile could not be loaded: ${error.message || 'Check your Supabase connection.'}`);
+        console.error('Unable to load the personal profile.', error);
+        if (active) setProfileError(`Your profile could not be loaded: ${error.message || 'Check your Supabase connection.'}`);
       });
-    return () => { active = false; };
-  }, []);
+
+    getOrInitializeDashboardContacts()
+      .then((settings) => {
+        if (active) {
+          setSharedContacts((current) => !current.updated_at || new Date(settings.updated_at) >= new Date(current.updated_at) ? settings : current);
+          setContactsError('');
+        }
+      })
+      .catch((error) => {
+        console.error('Unable to load shared contact settings.', error);
+        if (active) setContactsError(`Shared contacts could not be loaded: ${error.message || 'Check your Supabase connection.'}`);
+      });
+
+    return () => {
+      active = false;
+      unsubscribeContacts();
+    };
+  }, [user]);
 
   useEffect(() => {
     let active = true;
@@ -176,6 +212,14 @@ function Official() {
     setProfileOpen(false);
   };
 
+  const openContactsEditor = () => {
+    setEmergencyPhoneDraft(sharedContacts.emergency_phone || defaultContacts.emergency_phone);
+    setCallCenterPhoneDraft(sharedContacts.call_center_phone || defaultContacts.call_center_phone);
+    setContactsFormError('');
+    setContactsModalOpen(true);
+    setProfileOpen(false);
+  };
+
   const saveProfile = async (event) => {
     event.preventDefault();
     const name = profileNameDraft.trim();
@@ -187,17 +231,42 @@ function Official() {
     const nextProfile = { name, picture: profilePictureDraft };
     setProfileSaving(true);
     try {
-      const savedProfile = await saveDashboardSettings(nextProfile);
+      const savedProfile = user
+        ? await saveDashboardProfile({ userId: user.id, ...nextProfile })
+        : await saveSharedDashboardProfile(nextProfile);
       const persistedProfile = { name: savedProfile.name, picture: savedProfile.picture };
-      removeLegacyProfile();
       setProfileError('');
       setProfile(persistedProfile);
       setProfileModalOpen(false);
     } catch (error) {
-      console.error('Unable to save the shared profile.', error);
-      setFormError(`Profile could not be saved: ${error.message || 'Check your Supabase connection.'}`);
+      console.error('Unable to save the personal profile.', error);
+      setFormError(`Your profile could not be saved: ${error.message || 'Check your Supabase connection.'}`);
     } finally {
       setProfileSaving(false);
+    }
+  };
+
+  const saveContacts = async (event) => {
+    event.preventDefault();
+    const emergencyPhone = emergencyPhoneDraft.trim();
+    const callCenterPhone = callCenterPhoneDraft.trim();
+    if (!emergencyPhone || !callCenterPhone) {
+      setContactsFormError('Enter both the emergency line and call center phone numbers.');
+      return;
+    }
+
+    setContactsSaving(true);
+    setContactsFormError('');
+    try {
+      const savedContacts = await saveDashboardContacts({ emergencyPhone, callCenterPhone });
+      setSharedContacts(savedContacts);
+      setContactsError('');
+      setContactsModalOpen(false);
+    } catch (error) {
+      console.error('Unable to save shared contact settings.', error);
+      setContactsFormError(`Shared contacts could not be saved: ${error.message || 'Check your Supabase connection.'}`);
+    } finally {
+      setContactsSaving(false);
     }
   };
 
@@ -280,7 +349,6 @@ function Official() {
           <div className="brand-logo">{renderIcon('shield', 24)}</div>
           <div>
             <strong>AlertBarangay</strong>
-            <small>Emergency Ops</small>
           </div>
           <button type="button" className="icon-btn sidebar-close" aria-label="Close navigation" onClick={() => setSidebarOpen(false)}>
             {renderIcon('x', 18)}
@@ -308,9 +376,9 @@ function Official() {
         <div className="emergency-box">
           <strong>Emergency line</strong>
           <small>Hotline 24/7</small>
-          <a href="tel:911">
+          <a href={toTelHref(sharedContacts.emergency_phone)}>
             {renderIcon('phone', 16)}
-            911 / 0917-123-4567
+            {sharedContacts.emergency_phone}
           </a>
         </div>
       </aside>
@@ -348,7 +416,7 @@ function Official() {
                 </span>
                 <span className="profile-text">
                   <strong>{profile.name}</strong>
-                  <small>Barangay Admin</small>
+                  <small>{user ? 'Personal profile' : 'Shared profile'}</small>
                 </span>
                 {renderIcon('chevron', 16)}
               </button>
@@ -358,6 +426,17 @@ function Official() {
                   <button type="button" className="dropdown-row" onClick={openProfileEditor}>
                     {renderIcon('settings', 16)} Edit profile
                   </button>
+                  <button type="button" className="dropdown-row" onClick={openContactsEditor}>
+                    {renderIcon('phone', 16)} Edit shared contacts
+                  </button>
+                  {onSignOut && (
+                    <button type="button" className="dropdown-row" onClick={() => {
+                      setProfileOpen(false);
+                      onSignOut().catch((error) => setProfileError(`Unable to sign out: ${error.message || 'Try again.'}`));
+                    }}>
+                      {renderIcon('x', 16)} Sign out
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -366,6 +445,7 @@ function Official() {
 
         <div className="content" aria-live="polite">
           {profileError && <div className="card form-error" role="alert">{profileError}</div>}
+          {contactsError && <div className="card form-error" role="alert">{contactsError}</div>}
           {!isConfigured && (
             <div className="card" style={{ borderColor: '#f0d88c', background: '#fffaf0' }}>
               <div className="card-head">
@@ -383,6 +463,7 @@ function Official() {
               onRetryAnnouncements={isConfigured ? () => { setAnnouncementLoading(true); setAnnouncementError(''); setAnnouncementRetry((value) => value + 1); } : undefined}
               onNavigate={navigateTo}
               onAnnounce={() => { setFormError(''); setAnnouncementModalOpen(true); }}
+              contacts={sharedContacts}
             />
           )}
           {activeNav === 'dispatch' && (
@@ -408,7 +489,7 @@ function Official() {
         }}>
           <form className="modal" role="dialog" aria-modal="true" aria-labelledby="profile-modal-title" onSubmit={saveProfile}>
             <h2 id="profile-modal-title">Edit profile</h2>
-            <p className="muted">Profile changes are shared with everyone using this dashboard.</p>
+            <p className="muted">{user ? 'Your profile is saved to your official account. Shared contacts are edited separately.' : 'Profile changes are shared with everyone using this dashboard.'}</p>
             <div className="profile-picture-editor">
               <span className="avatar avatar-large">
                 {profilePictureDraft ? <img src={profilePictureDraft} alt="Profile preview" /> : renderIcon('residents', 28)}
@@ -432,6 +513,30 @@ function Official() {
             <div className="modal-actions">
               <button type="button" className="btn btn-outline" onClick={() => setProfileModalOpen(false)}>Cancel</button>
               <button type="submit" className="btn btn-maroon" disabled={profileSaving}>{profileSaving ? 'Saving...' : 'Save profile'}</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {contactsModalOpen && (
+        <div className="modal-backdrop" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setContactsModalOpen(false);
+        }}>
+          <form className="modal" role="dialog" aria-modal="true" aria-labelledby="contacts-modal-title" onSubmit={saveContacts}>
+            <h2 id="contacts-modal-title">Edit shared contacts</h2>
+            <p className="muted">These phone numbers are shared with everyone using this dashboard.</p>
+            <label>
+              Emergency line
+              <input type="tel" value={emergencyPhoneDraft} maxLength={40} onChange={(event) => setEmergencyPhoneDraft(event.target.value)} required />
+            </label>
+            <label>
+              Call center support
+              <input type="tel" value={callCenterPhoneDraft} maxLength={40} onChange={(event) => setCallCenterPhoneDraft(event.target.value)} required />
+            </label>
+            {contactsFormError && <p className="form-error" role="alert">{contactsFormError}</p>}
+            <div className="modal-actions">
+              <button type="button" className="btn btn-outline" onClick={() => setContactsModalOpen(false)} disabled={contactsSaving}>Cancel</button>
+              <button type="submit" className="btn btn-maroon" disabled={contactsSaving}>{contactsSaving ? 'Saving...' : 'Save contacts'}</button>
             </div>
           </form>
         </div>

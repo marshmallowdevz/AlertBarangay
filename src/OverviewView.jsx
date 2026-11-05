@@ -10,13 +10,11 @@ const responseTypes = [
   { label: 'Evacuation', icon: 'location' },
 ];
 
-const checklist = [
-  'Reconfirm family contact list for priority households.',
-  'Verify backup generators and radio check with purok captains.',
-  'Review weather advisories and flood-prone routes.',
-];
+function toTelHref(phone = '') {
+  return `tel:${phone.replace(/[^\d+]/g, '')}`;
+}
 
-export default function OverviewView({ announcements, announcementLoading, announcementError, onRetryAnnouncements, onNavigate, onAnnounce }) {
+export default function OverviewView({ announcements, announcementLoading, announcementError, onRetryAnnouncements, onNavigate, onAnnounce, contacts }) {
   return (
     <>
       <section className="card announcement-feature">
@@ -41,25 +39,17 @@ export default function OverviewView({ announcements, announcementLoading, annou
         <button type="button" className="link-btn" onClick={() => onNavigate('announcements')}>View all announcements</button>
       </section>
 
-      <div className="grid-2">
-        <section className="card">
-          <div className="card-head"><h2>{icon('response')} Response types</h2><button type="button" className="link-btn" onClick={() => onNavigate('dispatch')}>Open dispatch</button></div>
-          <div className="type-grid">
-            {responseTypes.map(({ label, icon: typeIcon }) => (
-              <button key={label} type="button" className="type-tile" onClick={() => onNavigate('dispatch')}>
-                {icon(typeIcon)}<span>{label}</span>
-              </button>
-            ))}
-          </div>
-          <a className="hotline" href="tel:09171234567">{icon('phone')}<span><strong>0917-123-4567</strong><small>Call center support</small></span></a>
-        </section>
-
-        <section className="card">
-          <div className="card-head"><h2>{icon('calendar')} Today&apos;s checklist</h2></div>
-          <ul className="reminder">{checklist.map((item) => <li key={item}>{item}</li>)}</ul>
-          <div className="motto">Prepared communities respond faster together.</div>
-        </section>
-      </div>
+      <section className="card">
+        <div className="card-head"><h2>{icon('response')} Response types</h2><button type="button" className="link-btn" onClick={() => onNavigate('dispatch')}>Open dispatch</button></div>
+        <div className="type-grid">
+          {responseTypes.map(({ label, icon: typeIcon }) => (
+            <button key={label} type="button" className="type-tile" onClick={() => onNavigate('dispatch')}>
+              {icon(typeIcon)}<span>{label}</span>
+            </button>
+          ))}
+        </div>
+        <a className="hotline" href={toTelHref(contacts.call_center_phone)}>{icon('phone')}<span><strong>{contacts.call_center_phone}</strong><small>Call center support</small></span></a>
+      </section>
     </>
   );
 }
