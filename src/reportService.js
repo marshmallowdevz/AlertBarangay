@@ -57,18 +57,6 @@ export async function listReports() {
   return rows.map((row) => toReport(row, historyByReport.get(row.id) ?? []));
 }
 
-export async function createReport({ type, severity, location, description, author }) {
-  const { data, error } = await supabase
-    .from('reports')
-    .insert({ type, severity, location, description, author })
-    .select(reportColumns)
-    .single();
-
-  if (error) throw error;
-  const history = await listReportHistory([data.id]);
-  return toReport(data, history);
-}
-
 export async function dispatchReport({ reportId, responseType, note }) {
   const { data, error } = await supabase.rpc('dispatch_report', {
     p_report_id: reportId,

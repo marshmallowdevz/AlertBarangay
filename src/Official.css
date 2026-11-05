@@ -171,6 +171,9 @@ nav { display: flex; flex-direction: column; gap: 6px; }
 }
 .card h2 { font-size: 1.1rem; color: var(--maroon); display: flex; align-items: center; gap: 8px; }
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+.announcement-feature { border-top: 4px solid var(--maroon); }
+.announcement-feature .card-head > div { flex: 1; }
+.announcement-feature .card-head p { max-width: 620px; }
 .muted { color: var(--muted); font-size: 0.88rem; margin-top: 4px; }
 
 .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }

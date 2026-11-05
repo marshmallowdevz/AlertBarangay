@@ -3,14 +3,13 @@ import './Official.css';
 import { configError, isConfigured } from './supabaseClient';
 import { initialConversations, initialResidents } from './dashboardData';
 import OverviewView from './OverviewView';
-import ReportsView from './ReportsView';
 import ResidentsView from './ResidentsView';
 import MessagesView from './MessagesView';
 import DispatchView from './DispatchView';
 import AnnouncementsView from './AnnouncementsView';
 import { createAnnouncement, listAnnouncements, subscribeToAnnouncements } from './announcementService';
 import Icon from './Icon';
-import { createReport as insertReport, dispatchReport, listReports } from './reportService';
+import { dispatchReport, listReports } from './reportService';
 import { getOrInitializeDashboardSettings, saveDashboardSettings } from './dashboardSettingsService';
 import { listNotifications, subscribeToNotifications } from './notificationService';
 import NotificationsView from './NotificationsView';
@@ -19,11 +18,10 @@ const renderIcon = (name, size = 18) => <Icon name={name} size={size} />;
 
 const navItems = [
   { id: 'overview', label: 'Overview', icon: 'overview', badge: null },
-  { id: 'reports', label: 'Reports', icon: 'reports', badge: '12' },
+  { id: 'announcements', label: 'Announcements', icon: 'bell', badge: null },
   { id: 'dispatch', label: 'Dispatch', icon: 'dispatch', badge: '4' },
   { id: 'residents', label: 'Residents', icon: 'residents', badge: null },
   { id: 'messages', label: 'Messages', icon: 'messages', badge: '3' },
-  { id: 'announcements', label: 'Announcements', icon: 'bell', badge: null },
   { id: 'notifications', label: 'Notifications', icon: 'bell', badge: null },
 ];
 
@@ -53,15 +51,11 @@ function Official() {
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [selectedReportId, setSelectedReportId] = useState('');
   const [profile, setProfile] = useState(defaultProfile);
   const [announcements, setAnnouncements] = useState([]);
   const [announcementLoading, setAnnouncementLoading] = useState(isConfigured);
   const [announcementError, setAnnouncementError] = useState(isConfigured ? '' : configError);
   const [announcementRetry, setAnnouncementRetry] = useState(0);
-  const [reportsLoading, setReportsLoading] = useState(isConfigured);
-  const [reportsError, setReportsError] = useState(isConfigured ? '' : configError);
-  const [reportsRetry, setReportsRetry] = useState(0);
   const [notifications, setNotifications] = useState([]);
   const [notificationsLoading, setNotificationsLoading] = useState(isConfigured);
   const [notificationsError, setNotificationsError] = useState(isConfigured ? '' : configError);
@@ -148,12 +142,10 @@ function Official() {
       .then((rows) => { if (active) setOperationalData((current) => ({ ...current, reports: rows })); })
       .catch((error) => {
         console.error('Unable to load shared reports.', error);
-        if (active) setReportsError(error.message || 'Reports could not be loaded.');
-      })
-      .finally(() => { if (active) setReportsLoading(false); });
+      });
 
     return () => { active = false; };
-  }, [reportsRetry]);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -261,17 +253,6 @@ function Official() {
 
   const navigateTo = (view) => setActiveNav(view);
 
-  const selectReport = (reportId) => {
-    setSelectedReportId(reportId);
-    setActiveNav('reports');
-  };
-
-  const createReport = async (reportInput) => {
-    const nextReport = await insertReport({ ...reportInput, author: profile.name || 'Barangay Official' });
-    setOperationalData((current) => ({ ...current, reports: [nextReport, ...current.reports] }));
-    setSelectedReportId(nextReport.id);
-  };
-
   const replyToConversation = (conversationId, body) => {
     const sentAt = new Date().toISOString();
     setOperationalData((current) => ({
@@ -284,7 +265,7 @@ function Official() {
 
   const dispatchResponse = async ({ reportId, responseType, note }) => {
     const report = operationalData.reports.find((item) => item.id === reportId);
-    if (!report) throw new Error('That report could not be found. Refresh the report list and try again.');
+    if (!report) throw new Error('That incident could not be found. Refresh the dashboard and try again.');
     await dispatchReport({ reportId: report.databaseId, responseType, note });
     const rows = await listReports();
     setOperationalData((current) => ({ ...current, reports: rows }));
@@ -396,26 +377,12 @@ function Official() {
 
           {activeNav === 'overview' && (
             <OverviewView
-              reports={operationalData.reports}
               announcements={announcements}
               announcementLoading={announcementLoading}
               announcementError={announcementError}
               onRetryAnnouncements={isConfigured ? () => { setAnnouncementLoading(true); setAnnouncementError(''); setAnnouncementRetry((value) => value + 1); } : undefined}
               onNavigate={navigateTo}
-              onSelectReport={selectReport}
               onAnnounce={() => { setFormError(''); setAnnouncementModalOpen(true); }}
-            />
-          )}
-          {activeNav === 'reports' && (
-            <ReportsView
-              reports={operationalData.reports}
-              loading={reportsLoading}
-              error={reportsError}
-              onRetry={isConfigured ? () => { setReportsLoading(true); setReportsError(''); setReportsRetry((value) => value + 1); } : undefined}
-              selectedReportId={selectedReportId}
-              onSelectReport={setSelectedReportId}
-              onCreateReport={createReport}
-              author={profile.name}
             />
           )}
           {activeNav === 'dispatch' && (
