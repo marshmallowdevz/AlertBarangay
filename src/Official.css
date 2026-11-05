@@ -321,6 +321,27 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--gold); bord
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
 
 .settings-form { display: flex; flex-direction: column; gap: 16px; max-width: 420px; margin-top: 16px; }
+.report-filters { display: grid; grid-template-columns: minmax(220px, 2fr) repeat(3, minmax(140px, 1fr)); gap: 12px; align-items: end; margin: 18px 0; }
+.report-filters label { display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: 13px; }
+.report-filters .search-field { max-width: none; margin: 0; }
+.report-record { gap: 10px; }
+.report-record summary { display: flex; align-items: center; gap: 12px; cursor: pointer; list-style: none; }
+.report-record summary::-webkit-details-marker { display: none; }
+.report-record summary > span:first-child { display: flex; flex: 1; flex-direction: column; gap: 4px; }
+.report-record summary > span:first-child small { color: var(--muted); }
+.status-pill, .severity-label { border-radius: 999px; padding: 4px 9px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.status-pill { background: #f0eee9; color: #45413b; }
+.status-resolved, .status-closed { background: #e7f3e9; color: #24633a; }
+.status-in-progress, .status-assigned { background: #e8f0fc; color: #244c83; }
+.severity-label { background: #f4eee1; color: #61512a; }
+.severity-high { background: #fae8e5; color: #952e25; }
+.severity-medium { background: #fff2d2; color: #795311; }
+.report-record h3 { margin: 8px 0 0; font-size: 15px; }
+.report-history { margin: 0; padding-left: 22px; }
+.report-history li { padding: 5px 0 5px 4px; }
+.report-history li p { margin: 4px 0; }
+@media (max-width: 760px) { .report-filters { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 480px) { .report-filters { grid-template-columns: 1fr; } .report-record summary { align-items: flex-start; flex-wrap: wrap; } }
 .profile-picture-editor { display: flex; align-items: center; gap: 16px; }
 .profile-picture-editor label { flex: 1; }
 .profile-picture-editor input { padding: 8px; }

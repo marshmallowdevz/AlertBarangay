@@ -21,11 +21,13 @@ import {
 } from './dashboardSettingsService';
 import { listNotifications, subscribeToNotifications } from './notificationService';
 import NotificationsView from './NotificationsView';
+import ReportsView from './ReportsView';
 
 const renderIcon = (name, size = 18) => <Icon name={name} size={size} />;
 
 const navItems = [
   { id: 'overview', label: 'Overview', icon: 'overview', badge: null },
+  { id: 'reports', label: 'Incident reports', icon: 'dispatch', badge: null },
   { id: 'announcements', label: 'Announcements', icon: 'bell', badge: null },
   { id: 'dispatch', label: 'Dispatch', icon: 'dispatch', badge: '4' },
   { id: 'residents', label: 'Residents', icon: 'residents', badge: null },
@@ -68,6 +70,9 @@ function Official({ user, onSignOut }) {
   const [profile, setProfile] = useState(() => getFallbackProfile(user));
   const [sharedContacts, setSharedContacts] = useState(defaultContacts);
   const [announcements, setAnnouncements] = useState([]);
+  const [reportsLoading, setReportsLoading] = useState(isConfigured);
+  const [reportsError, setReportsError] = useState(isConfigured ? '' : configError);
+  const [reportsRetry, setReportsRetry] = useState(0);
   const [announcementLoading, setAnnouncementLoading] = useState(isConfigured);
   const [announcementError, setAnnouncementError] = useState(isConfigured ? '' : configError);
   const [announcementRetry, setAnnouncementRetry] = useState(0);
@@ -178,10 +183,12 @@ function Official({ user, onSignOut }) {
       .then((rows) => { if (active) setOperationalData((current) => ({ ...current, reports: rows })); })
       .catch((error) => {
         console.error('Unable to load shared reports.', error);
-      });
+        if (active) setReportsError(error.message || 'Incident reports could not be loaded.');
+      })
+      .finally(() => { if (active) setReportsLoading(false); });
 
     return () => { active = false; };
-  }, []);
+  }, [reportsRetry]);
 
   useEffect(() => {
     let active = true;
@@ -464,6 +471,14 @@ function Official({ user, onSignOut }) {
               onNavigate={navigateTo}
               onAnnounce={() => { setFormError(''); setAnnouncementModalOpen(true); }}
               contacts={sharedContacts}
+            />
+          )}
+          {activeNav === 'reports' && (
+            <ReportsView
+              reports={operationalData.reports}
+              loading={reportsLoading}
+              error={reportsError}
+              onRetry={() => { setReportsLoading(true); setReportsError(''); setReportsRetry((value) => value + 1); }}
             />
           )}
           {activeNav === 'dispatch' && (
