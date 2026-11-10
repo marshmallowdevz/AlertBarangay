@@ -1,4 +1,5 @@
 import './Official.css';
+import LoadingIndicator from './LoadingIndicator';
 import Icon from './Icon';
 
 const icon = (name) => <Icon name={name} />;
@@ -26,7 +27,7 @@ export default function OverviewView({ announcements, announcementLoading, annou
           <button type="button" className="btn btn-maroon" onClick={onAnnounce}>{icon('plus')} Post announcement</button>
         </div>
         <div className="stack">
-          {announcementLoading && <p className="muted" role="status">Loading announcements…</p>}
+          {announcementLoading && <LoadingIndicator message="Loading announcements…" />}
           {announcementError && <div className="error-row"><p className="form-error" role="alert">{announcementError}</p>{onRetryAnnouncements && <button type="button" className="link-btn" onClick={onRetryAnnouncements} disabled={announcementLoading}>Retry</button>}</div>}
           {!announcementLoading && !announcementError && announcements.length === 0 && <p className="empty">No announcements have been posted yet.</p>}
           {announcements.slice(0, 3).map((item) => (

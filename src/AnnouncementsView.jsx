@@ -1,4 +1,5 @@
 import './Official.css';
+import LoadingIndicator from './LoadingIndicator';
 
 function formatCreatedAt(announcement) {
   const createdAt = announcement.created_at ?? announcement.createdAt;
@@ -12,7 +13,7 @@ export default function AnnouncementsView({ announcements, loading, error, onRet
         <div><h2>Community announcements</h2><p className="muted">Posts are shared with everyone using this dashboard.</p></div>
         <button type="button" className="btn btn-maroon" onClick={onAnnounce}>+ Announce</button>
       </div>
-      {loading && <p className="muted" role="status">Loading announcements…</p>}
+      {loading && <LoadingIndicator message="Loading announcements…" />}
       {error && <div className="error-row"><p className="form-error" role="alert">{error}</p>{onRetry && <button type="button" className="btn btn-outline" onClick={onRetry} disabled={loading}>Retry</button>}</div>}
       {!loading && !error && announcements.length === 0 && <p className="empty">No announcements have been posted yet.</p>}
       <div className="stack">

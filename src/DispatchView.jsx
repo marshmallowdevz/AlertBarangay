@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import './Official.css';
+import LoadingIndicator from './LoadingIndicator';
 
 const responseTypes = ['Medical', 'Fire', 'Rescue', 'Evacuation'];
 
@@ -56,7 +57,7 @@ export default function DispatchView({ reports, dispatches, onDispatch }) {
             <label>Dispatch note (optional)<textarea rows="4" maxLength={500} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Add instructions for the responding team" /></label>
             {formError && <p className="form-error" role="alert">{formError}</p>}
             {confirmation && <p className="form-notice" role="status">{confirmation}</p>}
-            <button type="submit" className="btn btn-maroon" disabled={saving}>{saving ? 'Saving...' : 'Dispatch response'}</button>
+            <button type="submit" className="btn btn-maroon" disabled={saving}>{saving ? <LoadingIndicator message="Saving..." compact /> : 'Dispatch response'}</button>
           </form>
         )}
       </section>

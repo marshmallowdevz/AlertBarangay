@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react';
 import './Official.css';
 import Official from './Official';
 import LoginView from './LoginView';
+import LoadingIndicator from './LoadingIndicator';
 import { configError, isConfigured, supabase } from './supabaseClient';
 
 function AuthStatus({ children }) {
-  return <main className="logout-screen"><p role="status">{children}</p></main>;
+  return <main className="logout-screen"><LoadingIndicator message={children} className="auth-loading" /></main>;
 }
 
 function AccessDenied({ onSignOut }) {

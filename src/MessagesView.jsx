@@ -36,7 +36,7 @@ export default function MessagesView({ conversations, onReply }) {
             <h3>{activeConversation?.residentName}</h3>
             <div className="thread-history" aria-live="polite">
               {activeConversation?.messages.map((message) => (
-                <article key={message.id} className={`message-bubble ${message.sender === 'Barangay Official' ? 'outgoing' : ''}`}>
+                <article key={message.id} className={`message-bubble ${message.senderRole === 'official' ? 'outgoing' : ''}`}>
                   <strong>{message.sender}</strong><p>{message.body}</p>
                   <small>{new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(message.createdAt))}</small>
                 </article>

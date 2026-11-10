@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import LoadingIndicator from './LoadingIndicator';
 
 export default function LoginView({ onSignIn, configMessage = '' }) {
   const [email, setEmail] = useState('');
@@ -36,7 +37,7 @@ export default function LoginView({ onSignIn, configMessage = '' }) {
           <input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required />
         </label>
         <button type="submit" className="btn btn-maroon" disabled={submitting || Boolean(configMessage)}>
-          {submitting ? 'Signing in...' : 'Sign in'}
+          {submitting ? <LoadingIndicator message="Signing in..." compact /> : 'Sign in'}
         </button>
       </form>
     </main>

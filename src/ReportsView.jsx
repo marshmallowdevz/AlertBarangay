@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import './Official.css';
+import LoadingIndicator from './LoadingIndicator';
 
 const reportTypes = ['Medical', 'Fire', 'Rescue', 'Flooding', 'Power', 'Other'];
 const reportStatuses = ['Pending', 'Assigned', 'In progress', 'Monitoring', 'Resolved', 'Closed'];
@@ -34,7 +35,7 @@ export default function ReportsView({ reports, loading, error, onRetry }) {
     <section className="card">
       <div className="card-head">
         <div><h2>Incident reports</h2><p className="muted">Review submitted incidents and their response history.</p></div>
-        <span className="badge">{filteredReports.length} shown</span>
+        <span className="report-count">{filteredReports.length} shown</span>
       </div>
       <div className="report-filters" role="search">
         <label className="search-field">Search reports
@@ -44,7 +45,7 @@ export default function ReportsView({ reports, loading, error, onRetry }) {
         <label>Status<select value={status} onChange={(event) => setStatus(event.target.value)}><option>All statuses</option>{reportStatuses.map((item) => <option key={item}>{item}</option>)}</select></label>
         <label>Severity<select value={severity} onChange={(event) => setSeverity(event.target.value)}><option>All severities</option>{reportSeverities.map((item) => <option key={item}>{item}</option>)}</select></label>
       </div>
-      {loading && <p className="muted" role="status">Loading incident reports…</p>}
+      {loading && <LoadingIndicator message="Loading incident reports…" />}
       {error && <div className="error-row"><p className="form-error" role="alert">{error}</p><button type="button" className="btn btn-outline" onClick={onRetry} disabled={loading}>Retry</button></div>}
       {!loading && !error && filteredReports.length === 0 && <p className="empty">{reports.length ? 'No reports match these filters.' : 'No incident reports have been submitted yet.'}</p>}
       <div className="stack">

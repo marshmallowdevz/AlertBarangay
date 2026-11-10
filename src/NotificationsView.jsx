@@ -1,4 +1,5 @@
 import './Official.css';
+import LoadingIndicator from './LoadingIndicator';
 
 const labels = {
   report_created: 'Report',
@@ -13,7 +14,7 @@ export default function NotificationsView({ notifications, loading, error, onRet
         <div><h2>Shared notifications</h2><p className="muted">Recent reports, response assignments, and announcements.</p></div>
         <button type="button" className="btn btn-outline" onClick={onRetry} disabled={loading || !onRetry}>Refresh</button>
       </div>
-      {loading && <p className="muted" role="status">Loading notifications...</p>}
+      {loading && <LoadingIndicator message="Loading notifications…" />}
       {error && <p className="form-error" role="alert">Notifications could not be loaded: {error}</p>}
       {!loading && !error && notifications.length === 0 && <p className="empty">No notifications yet.</p>}
       <div className="stack">

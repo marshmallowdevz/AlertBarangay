@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import './Official.css';
 import { configError, isConfigured } from './supabaseClient';
 import { initialConversations, initialResidents } from './dashboardData';
@@ -22,21 +22,33 @@ import {
 import { listNotifications, subscribeToNotifications } from './notificationService';
 import NotificationsView from './NotificationsView';
 import ReportsView from './ReportsView';
+import LoadingIndicator from './LoadingIndicator';
 
 const renderIcon = (name, size = 18) => <Icon name={name} size={size} />;
 
 const navItems = [
-  { id: 'overview', label: 'Overview', icon: 'overview', badge: null },
-  { id: 'reports', label: 'Incident reports', icon: 'dispatch', badge: null },
-  { id: 'announcements', label: 'Announcements', icon: 'bell', badge: null },
-  { id: 'dispatch', label: 'Dispatch', icon: 'dispatch', badge: '4' },
-  { id: 'residents', label: 'Residents', icon: 'residents', badge: null },
-  { id: 'messages', label: 'Messages', icon: 'messages', badge: '3' },
-  { id: 'notifications', label: 'Notifications', icon: 'bell', badge: null },
+  { id: 'overview', label: 'Overview', icon: 'overview' },
+  { id: 'reports', label: 'Incident reports', icon: 'dispatch' },
+  { id: 'announcements', label: 'Announcements', icon: 'bell' },
+  { id: 'dispatch', label: 'Dispatch', icon: 'dispatch' },
+  { id: 'residents', label: 'Residents', icon: 'residents' },
+  { id: 'messages', label: 'Messages', icon: 'messages' },
+  { id: 'notifications', label: 'Notifications', icon: 'bell' },
 ];
 
 const defaultContacts = { emergency_phone: '911', call_center_phone: '0917-123-4567' };
 const defaultSharedProfile = { name: 'Captain Dela Cruz', picture: '' };
+const themeStorageKey = 'alertBarangay.theme';
+const themeModes = ['system', 'light', 'dark'];
+
+function readThemeMode() {
+  try {
+    const savedMode = window.localStorage.getItem(themeStorageKey);
+    return themeModes.includes(savedMode) ? savedMode : 'system';
+  } catch {
+    return 'system';
+  }
+}
 
 function getFallbackProfile(user) {
   if (!user) return defaultSharedProfile;
@@ -67,6 +79,9 @@ function Official({ user, onSignOut }) {
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
+  const [themeMode, setThemeMode] = useState(readThemeMode);
+  const themeToggleRef = useRef(null);
   const [profile, setProfile] = useState(() => getFallbackProfile(user));
   const [sharedContacts, setSharedContacts] = useState(defaultContacts);
   const [announcements, setAnnouncements] = useState([]);
@@ -97,6 +112,32 @@ function Official({ user, onSignOut }) {
   const [announcementBody, setAnnouncementBody] = useState('');
   const [formError, setFormError] = useState('');
   const [now, setNow] = useState(() => new Date());
+  const dispatchCount = operationalData.reports.filter((report) => !['Resolved', 'Closed'].includes(report.status)).length;
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia?.('(prefers-color-scheme: dark)');
+    const applyTheme = () => {
+      const resolvedTheme = themeMode === 'system' ? (mediaQuery?.matches ? 'dark' : 'light') : themeMode;
+      document.documentElement.dataset.theme = resolvedTheme;
+    };
+
+    applyTheme();
+    if (themeMode !== 'system' || !mediaQuery) return undefined;
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener('change', applyTheme);
+      return () => mediaQuery.removeEventListener('change', applyTheme);
+    }
+    mediaQuery.addListener(applyTheme);
+    return () => mediaQuery.removeListener(applyTheme);
+  }, [themeMode]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(themeStorageKey, themeMode);
+    } catch (error) {
+      console.warn('Unable to save the theme preference in this browser.', error);
+    }
+  }, [themeMode]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
@@ -198,7 +239,15 @@ function Official({ user, onSignOut }) {
       return [...unique.values()].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 50);
     });
     const unsubscribe = subscribeToNotifications(
-      (notification) => { if (active) mergeNotifications([notification]); },
+      (notification) => {
+        if (!active) return;
+        mergeNotifications([notification]);
+        if (['report_created', 'report_dispatched'].includes(notification.type)) {
+          listReports()
+            .then((rows) => { if (active) setOperationalData((current) => ({ ...current, reports: rows })); })
+            .catch((error) => console.error('Unable to refresh reports after a live notification.', error));
+        }
+      },
       (error) => { if (active) setNotificationsError(error.message); },
     );
     listNotifications()
@@ -334,7 +383,7 @@ function Official({ user, onSignOut }) {
     setOperationalData((current) => ({
       ...current,
       conversations: current.conversations.map((conversation) => conversation.id === conversationId
-        ? { ...conversation, messages: [...conversation.messages, { id: `reply-${Date.now()}`, sender: profile.name, body, createdAt: sentAt }] }
+        ? { ...conversation, messages: [...conversation.messages, { id: `reply-${Date.now()}`, sender: profile.name, senderRole: 'official', body, createdAt: sentAt }] }
         : conversation),
     }));
   };
@@ -363,21 +412,24 @@ function Official({ user, onSignOut }) {
         </div>
 
         <nav>
-          {navItems.map(({ id, label, icon, badge }) => (
-            <button
-              key={id}
-              type="button"
-              className={`nav-item ${activeNav === id ? 'active' : ''}`}
-              onClick={() => {
-                setActiveNav(id);
-                setSidebarOpen(false);
-              }}
-            >
-              {renderIcon(icon, 18)}
-              <span>{label}</span>
-              {badge && <span className="badge">{badge}</span>}
-            </button>
-          ))}
+          {navItems.map(({ id, label, icon }) => {
+            const badgeCount = id === 'dispatch' ? dispatchCount : 0;
+            return (
+              <button
+                key={id}
+                type="button"
+                className={`nav-item ${activeNav === id ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveNav(id);
+                  setSidebarOpen(false);
+                }}
+              >
+                {renderIcon(icon, 18)}
+                <span>{label}</span>
+                {badgeCount > 0 && <span className="badge">{badgeCount}</span>}
+              </button>
+            );
+          })}
         </nav>
 
         <div className="emergency-box">
@@ -409,6 +461,53 @@ function Official({ user, onSignOut }) {
           </div>
 
           <div className="topbar-right">
+            <div className="dropdown-wrap theme-control">
+              <button
+                type="button"
+                className="theme-toggle"
+                ref={themeToggleRef}
+                aria-label={`Appearance: ${themeMode}`}
+                aria-expanded={themeMenuOpen}
+                aria-controls="appearance-menu"
+                onClick={() => setThemeMenuOpen((open) => !open)}
+              >
+                {renderIcon(themeMode === 'system' ? 'system' : themeMode === 'dark' ? 'moon' : 'sun', 18)}
+                <span>Appearance</span>
+              </button>
+              {themeMenuOpen && (
+                <div
+                  id="appearance-menu"
+                  className="dropdown theme-menu"
+                  role="group"
+                  aria-label="Choose appearance"
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape') {
+                      event.preventDefault();
+                      setThemeMenuOpen(false);
+                      themeToggleRef.current?.focus();
+                    }
+                  }}
+                >
+                  {themeModes.map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      aria-pressed={themeMode === mode}
+                      className={`theme-option ${themeMode === mode ? 'selected' : ''}`}
+                      onClick={() => {
+                        setThemeMode(mode);
+                        setThemeMenuOpen(false);
+                        themeToggleRef.current?.focus();
+                      }}
+                    >
+                      {renderIcon(mode === 'system' ? 'system' : mode === 'dark' ? 'moon' : 'sun', 17)}
+                      <span>{mode[0].toUpperCase() + mode.slice(1)}</span>
+                      {themeMode === mode && <span className="theme-check" aria-hidden="true">✓</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <div className="dropdown-wrap">
               <button
                 type="button"
@@ -527,7 +626,7 @@ function Official({ user, onSignOut }) {
             {formError && <p className="form-error" role="alert">{formError}</p>}
             <div className="modal-actions">
               <button type="button" className="btn btn-outline" onClick={() => setProfileModalOpen(false)}>Cancel</button>
-              <button type="submit" className="btn btn-maroon" disabled={profileSaving}>{profileSaving ? 'Saving...' : 'Save profile'}</button>
+              <button type="submit" className="btn btn-maroon" disabled={profileSaving}>{profileSaving ? <LoadingIndicator message="Saving..." compact /> : 'Save profile'}</button>
             </div>
           </form>
         </div>
@@ -551,7 +650,7 @@ function Official({ user, onSignOut }) {
             {contactsFormError && <p className="form-error" role="alert">{contactsFormError}</p>}
             <div className="modal-actions">
               <button type="button" className="btn btn-outline" onClick={() => setContactsModalOpen(false)} disabled={contactsSaving}>Cancel</button>
-              <button type="submit" className="btn btn-maroon" disabled={contactsSaving}>{contactsSaving ? 'Saving...' : 'Save contacts'}</button>
+              <button type="submit" className="btn btn-maroon" disabled={contactsSaving}>{contactsSaving ? <LoadingIndicator message="Saving..." compact /> : 'Save contacts'}</button>
             </div>
           </form>
         </div>
@@ -587,7 +686,7 @@ function Official({ user, onSignOut }) {
             {formError && <p className="form-error" role="alert">{formError}</p>}
             <div className="modal-actions">
               <button type="button" className="btn btn-outline" onClick={() => setAnnouncementModalOpen(false)}>Cancel</button>
-              <button type="submit" className="btn btn-maroon" disabled={postingAnnouncement}>{postingAnnouncement ? 'Posting…' : 'Post announcement'}</button>
+              <button type="submit" className="btn btn-maroon" disabled={postingAnnouncement}>{postingAnnouncement ? <LoadingIndicator message="Posting…" compact /> : 'Post announcement'}</button>
             </div>
           </form>
         </div>

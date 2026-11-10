@@ -55,8 +55,8 @@ export const initialConversations = [
     residentId: 'RES-001',
     residentName: 'Maria Santos',
     messages: [
-      { id: 'MSG-001-1', sender: 'Maria Santos', body: 'There is smoke near the corner of Mabini Street.', createdAt: '2026-10-08T10:12:00+08:00' },
-      { id: 'MSG-001-2', sender: 'Barangay Official', body: 'Thank you. Responders are checking the area now.', createdAt: '2026-10-08T10:15:00+08:00' },
+      { id: 'MSG-001-1', sender: 'Maria Santos', senderRole: 'resident', body: 'There is smoke near the corner of Mabini Street.', createdAt: '2026-10-08T10:12:00+08:00' },
+      { id: 'MSG-001-2', sender: 'Barangay Official', senderRole: 'official', body: 'Thank you. Responders are checking the area now.', createdAt: '2026-10-08T10:15:00+08:00' },
     ],
   },
   {
@@ -64,7 +64,7 @@ export const initialConversations = [
     residentId: 'RES-003',
     residentName: 'Ana Cruz',
     messages: [
-      { id: 'MSG-002-1', sender: 'Ana Cruz', body: 'Can you confirm whether the health center is open today?', createdAt: '2026-10-08T09:40:00+08:00' },
+      { id: 'MSG-002-1', sender: 'Ana Cruz', senderRole: 'resident', body: 'Can you confirm whether the health center is open today?', createdAt: '2026-10-08T09:40:00+08:00' },
     ],
   },
 ];
