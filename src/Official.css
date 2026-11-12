@@ -358,6 +358,16 @@ td { padding: 14px 8px; border-bottom: 1px solid var(--line); white-space: nowra
 .list-item small { color: var(--muted); }
 .announcement-item p { margin: 0; line-height: 1.5; overflow-wrap: anywhere; }
 .announcement-item small { line-height: 1.4; }
+.announcement-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.announcement-menu-wrap { position: relative; flex: 0 0 auto; margin: -7px -7px 0 0; }
+.announcement-menu-trigger { width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--surface-neutral); color: var(--muted); font-size: 17px; font-weight: 700; letter-spacing: 1px; }
+.announcement-menu-trigger:hover, .announcement-menu-trigger[aria-expanded="true"] { background: var(--line); color: var(--ink); }
+.announcement-menu { position: absolute; top: 40px; right: 0; z-index: 10; min-width: 150px; padding: 5px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface, #fff); box-shadow: 0 8px 24px rgba(25, 18, 18, 0.16); }
+.announcement-menu button { width: 100%; padding: 9px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--ink); text-align: left; }
+.announcement-menu button:hover:not(:disabled) { background: var(--surface-muted, #f5f1ec); }
+.announcement-menu button.danger { color: #b3261e; }
+.announcement-menu button:disabled { opacity: 0.55; }
+.announcement-filters { display: flex; gap: 8px; margin-top: 12px; }
 .row-actions { display: flex; gap: 10px; align-items: center; }
 
 /* ---------- Buttons ---------- */

@@ -7,7 +7,7 @@ import ResidentsView from './ResidentsView';
 import MessagesView from './MessagesView';
 import DispatchView from './DispatchView';
 import AnnouncementsView from './AnnouncementsView';
-import { createAnnouncement, listAnnouncements, subscribeToAnnouncements } from './announcementService';
+import { archiveAnnouncement, createAnnouncement, deleteAnnouncement, listAnnouncements, subscribeToAnnouncements, updateAnnouncement } from './announcementService';
 import Icon from './Icon';
 import { dispatchReport, listReports } from './reportService';
 import {
@@ -98,11 +98,14 @@ function Official({ user, onSignOut }) {
   const [profileError, setProfileError] = useState(isConfigured ? '' : configError);
   const [contactsError, setContactsError] = useState(isConfigured ? '' : configError);
   const [postingAnnouncement, setPostingAnnouncement] = useState(false);
+  const [busyAnnouncementId, setBusyAnnouncementId] = useState('');
   const [profileSaving, setProfileSaving] = useState(false);
   const [contactsSaving, setContactsSaving] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [contactsModalOpen, setContactsModalOpen] = useState(false);
   const [announcementModalOpen, setAnnouncementModalOpen] = useState(false);
+  const [editingAnnouncement, setEditingAnnouncement] = useState(null);
+  const [announcementActionError, setAnnouncementActionError] = useState('');
   const [profileNameDraft, setProfileNameDraft] = useState(() => getFallbackProfile(user).name);
   const [profilePictureDraft, setProfilePictureDraft] = useState('');
   const [emergencyPhoneDraft, setEmergencyPhoneDraft] = useState(defaultContacts.emergency_phone);
@@ -199,6 +202,8 @@ function Official({ user, onSignOut }) {
 
     const unsubscribe = subscribeToAnnouncements(
       (announcement) => { if (active) setAnnouncements((current) => mergeAnnouncements(current, [announcement])); },
+      (announcement) => { if (active) setAnnouncements((current) => mergeAnnouncements(current, [announcement])); },
+      (id) => { if (active) setAnnouncements((current) => current.filter((announcement) => announcement.id !== id)); },
       (error) => { if (active) setAnnouncementError(error.message); },
     );
 
@@ -362,19 +367,72 @@ function Official({ user, onSignOut }) {
 
     setPostingAnnouncement(true);
     try {
-      const announcement = await createAnnouncement({ title, body, author: profile.name });
+      const announcement = editingAnnouncement
+        ? await updateAnnouncement({ id: editingAnnouncement.id, title, body })
+        : await createAnnouncement({ title, body, author: profile.name });
       setAnnouncements((current) => mergeAnnouncements(current, [announcement]));
       setAnnouncementTitle('');
       setAnnouncementBody('');
+      setEditingAnnouncement(null);
       setFormError('');
       setAnnouncementModalOpen(false);
     } catch (error) {
-      console.error('Unable to post shared announcement.', error);
-      setFormError(`The announcement could not be shared: ${error.message || 'An unexpected error occurred.'}`);
+      console.error(editingAnnouncement ? 'Unable to edit shared announcement.' : 'Unable to post shared announcement.', error);
+      setFormError(`The announcement could not be ${editingAnnouncement ? 'updated' : 'shared'}: ${error.message || 'An unexpected error occurred.'}`);
     } finally {
       setPostingAnnouncement(false);
     }
   };
+
+  const removeAnnouncement = async (announcement) => {
+    if (!window.confirm(`Delete “${announcement.title}”? This cannot be undone.`)) return;
+    setBusyAnnouncementId(announcement.id);
+    setAnnouncementActionError('');
+    try {
+      await deleteAnnouncement(announcement.id);
+      setAnnouncements((current) => current.filter((item) => item.id !== announcement.id));
+    } catch (error) {
+      console.error('Unable to delete shared announcement.', error);
+      setAnnouncementActionError(`The announcement could not be deleted: ${error.message || 'An unexpected error occurred.'}`);
+    } finally {
+      setBusyAnnouncementId('');
+    }
+  };
+
+  const editAnnouncement = (announcement) => {
+    setAnnouncementActionError('');
+    setEditingAnnouncement(announcement);
+    setAnnouncementTitle(announcement.title);
+    setAnnouncementBody(announcement.body);
+    setFormError('');
+    setAnnouncementModalOpen(true);
+  };
+
+  const changeAnnouncementArchiveState = async (announcement) => {
+    const isArchived = !announcement.is_archived;
+    setBusyAnnouncementId(announcement.id);
+    setAnnouncementActionError('');
+    try {
+      const updated = await archiveAnnouncement(announcement.id, isArchived);
+      setAnnouncements((current) => mergeAnnouncements(current, [updated]));
+    } catch (error) {
+      console.error('Unable to update announcement archive state.', error);
+      setAnnouncementActionError(`The announcement could not be ${isArchived ? 'archived' : 'restored'}: ${error.message || 'An unexpected error occurred.'}`);
+    } finally {
+      setBusyAnnouncementId('');
+    }
+  };
+
+  const openAnnouncementComposer = () => {
+    setAnnouncementActionError('');
+    setEditingAnnouncement(null);
+    setAnnouncementTitle('');
+    setAnnouncementBody('');
+    setFormError('');
+    setAnnouncementModalOpen(true);
+  };
+
+  const canManageAnnouncements = user?.app_metadata?.barangay_role === 'official';
 
   const navigateTo = (view) => setActiveNav(view);
 
@@ -563,12 +621,17 @@ function Official({ user, onSignOut }) {
 
           {activeNav === 'overview' && (
             <OverviewView
-              announcements={announcements}
+              announcements={announcements.filter((announcement) => !announcement.is_archived)}
               announcementLoading={announcementLoading}
               announcementError={announcementError}
               onRetryAnnouncements={isConfigured ? () => { setAnnouncementLoading(true); setAnnouncementError(''); setAnnouncementRetry((value) => value + 1); } : undefined}
               onNavigate={navigateTo}
-              onAnnounce={() => { setFormError(''); setAnnouncementModalOpen(true); }}
+              onAnnounce={openAnnouncementComposer}
+              onEditAnnouncement={canManageAnnouncements ? editAnnouncement : undefined}
+              onDeleteAnnouncement={canManageAnnouncements ? removeAnnouncement : undefined}
+              onArchiveAnnouncement={canManageAnnouncements ? changeAnnouncementArchiveState : undefined}
+              busyAnnouncementId={busyAnnouncementId}
+              announcementActionError={announcementActionError}
               contacts={sharedContacts}
             />
           )}
@@ -588,7 +651,7 @@ function Official({ user, onSignOut }) {
             <MessagesView conversations={operationalData.conversations} onReply={replyToConversation} />
           )}
           {activeNav === 'announcements' && (
-            <AnnouncementsView announcements={announcements} loading={announcementLoading} error={announcementError} onRetry={isConfigured ? () => { setAnnouncementLoading(true); setAnnouncementError(''); setAnnouncementRetry((value) => value + 1); } : undefined} onAnnounce={() => { setFormError(''); setAnnouncementModalOpen(true); }} />
+            <AnnouncementsView announcements={announcements} loading={announcementLoading} error={announcementError} onRetry={isConfigured ? () => { setAnnouncementLoading(true); setAnnouncementError(''); setAnnouncementRetry((value) => value + 1); } : undefined} onAnnounce={openAnnouncementComposer} onEdit={canManageAnnouncements ? editAnnouncement : undefined} onDelete={canManageAnnouncements ? removeAnnouncement : undefined} onArchive={canManageAnnouncements ? changeAnnouncementArchiveState : undefined} busyAnnouncementId={busyAnnouncementId} actionError={announcementActionError} />
           )}
           {activeNav === 'notifications' && (
             <NotificationsView notifications={notifications} loading={notificationsLoading} error={notificationsError} onRetry={isConfigured ? () => { setNotificationsLoading(true); setNotificationsError(''); setNotificationsRetry((value) => value + 1); } : undefined} />
@@ -661,7 +724,7 @@ function Official({ user, onSignOut }) {
           if (event.target === event.currentTarget) setAnnouncementModalOpen(false);
         }}>
           <form className="modal" role="dialog" aria-modal="true" aria-labelledby="announcement-modal-title" onSubmit={postAnnouncement}>
-            <h2 id="announcement-modal-title">Post an announcement</h2>
+            <h2 id="announcement-modal-title">{editingAnnouncement ? 'Edit announcement' : 'Post an announcement'}</h2>
             <p className="muted">Announcements are shared with everyone using this dashboard.</p>
             <label>
               Title
@@ -685,8 +748,8 @@ function Official({ user, onSignOut }) {
             </label>
             {formError && <p className="form-error" role="alert">{formError}</p>}
             <div className="modal-actions">
-              <button type="button" className="btn btn-outline" onClick={() => setAnnouncementModalOpen(false)}>Cancel</button>
-              <button type="submit" className="btn btn-maroon" disabled={postingAnnouncement}>{postingAnnouncement ? <LoadingIndicator message="Posting…" compact /> : 'Post announcement'}</button>
+              <button type="button" className="btn btn-outline" onClick={() => { setAnnouncementModalOpen(false); setEditingAnnouncement(null); }}>Cancel</button>
+              <button type="submit" className="btn btn-maroon" disabled={postingAnnouncement}>{postingAnnouncement ? <LoadingIndicator message={editingAnnouncement ? 'Saving…' : 'Posting…'} compact /> : editingAnnouncement ? 'Save changes' : 'Post announcement'}</button>
             </div>
           </form>
         </div>

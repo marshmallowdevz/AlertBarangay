@@ -1,5 +1,6 @@
 import './Official.css';
 import LoadingIndicator from './LoadingIndicator';
+import AnnouncementActionsMenu from './AnnouncementActionsMenu';
 import Icon from './Icon';
 
 const icon = (name) => <Icon name={name} />;
@@ -15,7 +16,7 @@ function toTelHref(phone = '') {
   return `tel:${phone.replace(/[^\d+]/g, '')}`;
 }
 
-export default function OverviewView({ announcements, announcementLoading, announcementError, onRetryAnnouncements, onNavigate, onAnnounce, contacts }) {
+export default function OverviewView({ announcements, announcementLoading, announcementError, onRetryAnnouncements, onNavigate, onAnnounce, onEditAnnouncement, onDeleteAnnouncement, onArchiveAnnouncement, busyAnnouncementId, announcementActionError, contacts }) {
   return (
     <>
       <section className="card announcement-feature">
@@ -29,10 +30,15 @@ export default function OverviewView({ announcements, announcementLoading, annou
         <div className="stack">
           {announcementLoading && <LoadingIndicator message="Loading announcements…" />}
           {announcementError && <div className="error-row"><p className="form-error" role="alert">{announcementError}</p>{onRetryAnnouncements && <button type="button" className="link-btn" onClick={onRetryAnnouncements} disabled={announcementLoading}>Retry</button>}</div>}
-          {!announcementLoading && !announcementError && announcements.length === 0 && <p className="empty">No announcements have been posted yet.</p>}
-          {announcements.slice(0, 3).map((item) => (
+          {announcementActionError && <p className="form-error" role="alert">{announcementActionError}</p>}
+          {!announcementLoading && !announcementError && announcements.filter((item) => !item.is_archived).length === 0 && <p className="empty">No announcements have been posted yet.</p>}
+          {announcements.filter((item) => !item.is_archived).slice(0, 3).map((item) => (
             <article key={item.id} className="list-item announcement-item">
-              <strong>{item.title}</strong><p>{item.body}</p>
+              <div className="announcement-heading">
+                <strong>{item.title}</strong>
+                {onEditAnnouncement && <AnnouncementActionsMenu announcement={item} onEdit={onEditAnnouncement} onDelete={onDeleteAnnouncement} onArchive={onArchiveAnnouncement} busy={busyAnnouncementId === item.id} />}
+              </div>
+              <p>{item.body}</p>
               <small>Posted by {item.author} · {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(item.created_at ?? item.createdAt))}</small>
             </article>
           ))}
