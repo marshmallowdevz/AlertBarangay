@@ -1066,12 +1066,12 @@ function SettingsPage({ user, email, language, onLanguageChange, onSave, onAvata
           <button type="submit" className="btn btn-maroon">{tr("Update password", language)}</button>
         </form>}
         <ProfileRow icon={Languages} label={tr("Language", language)} detail={language === "fil" ? "Filipino" : "English"} active={section === "language"} onClick={() => setSection(section === "language" ? "" : "language")} />
-        {section === "language" && <div className="profile-detail language-options"><p className="theme-description">{tr("Choose your language.", language)}</p><div className="theme-options" role="group" aria-label={tr("Language", language)}>{[["en", "English"], ["fil", "Filipino"]].map(([value, label]) => <button key={value} type="button" className={`theme-option ${language === value ? "selected" : ""}`} aria-pressed={language === value} onClick={() => onLanguageChange(value)}>{label}</button>)}</div></div>}
+        {section === "language" && <div className="profile-detail language-options"><div className="theme-options" role="group" aria-label={tr("Language", language)}>{[["en", "English"], ["fil", "Filipino"]].map(([value, label]) => <button key={value} type="button" className={`theme-option ${language === value ? "selected" : ""}`} aria-pressed={language === value} onClick={() => onLanguageChange(value)}>{label}</button>)}</div></div>}
       </ProfileGroup>
 
       <ProfileGroup title={tr("Preferences", language)}>
         <ProfileRow icon={Sun} label={tr("Theme", language)} detail={tr(themePreference === "system" ? "System" : themePreference === "dark" ? "Dark" : "Light", language)} active={section === "theme"} onClick={() => setSection(section === "theme" ? "" : "theme")} />
-        {section === "theme" && <div className="profile-detail"><p className="theme-description">{tr("Choose how AlertBarangay looks on this device.", language)}</p><div className="theme-options" role="group" aria-label={tr("Theme", language)}>{[["light", "Light"], ["dark", "Dark"], ["system", "System auto"]].map(([value, label]) => <button key={value} type="button" className={`theme-option ${themePreference === value ? "selected" : ""}`} aria-pressed={themePreference === value} onClick={() => onThemeChange(value)}>{tr(label, language)}</button>)}</div></div>}
+        {section === "theme" && <div className="profile-detail"><div className="theme-options" role="group" aria-label={tr("Theme", language)}>{[["light", "Light"], ["dark", "Dark"], ["system", "System auto"]].map(([value, label]) => <button key={value} type="button" className={`theme-option ${themePreference === value ? "selected" : ""}`} aria-pressed={themePreference === value} onClick={() => onThemeChange(value)}>{tr(label, language)}</button>)}</div></div>}
       </ProfileGroup>
 
       <ProfileGroup title={tr("Support", language)}>
