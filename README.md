@@ -1,60 +1,35 @@
-# React + Vite
+# Alert Barangay
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This repository contains two separate sites connected to the same Supabase project:
 
-Currently, two official plugins are available:
+- **Officials’ desktop dashboard** is the root Vite app. Its entrypoint is `src/main.jsx` and it loads `AuthApp`.
+- **Residents’ mobile/web app** is the independent Vite and Capacitor project in `resident-app/`. Its entrypoint is `resident-app/src/main.jsx` and it loads the resident reporting UI and incident map.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+The sites keep separate entrypoints and access flows. Supabase Row Level Security and the officials app’s role checks control access to their shared data. Database migrations and Edge Functions live once at the repository root under `supabase/` because they affect the shared project.
 
-## React Compiler
+## Run the officials’ dashboard
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+1. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`.
+2. From the repository root, run `npm install` and `npm run dev`.
+3. Set `VITE_REQUIRE_AUTH=true` in the officials site’s deployment to require official sign-in. Official accounts need the trusted `app_metadata` claim `{"barangay_role":"official"}`.
 
-## Expanding the ESLint configuration
+## Run the residents’ app
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
-
-## Alert Barangay incident map
-
-### Local setup
-
-1. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_PUBLISHABLE_KEY` to the Supabase publishable key. `.env.local` is ignored by Git.
-2. Install dependencies with `npm install`, then start the app with `npm run dev`.
-3. The map loads Leaflet 1.9.4 and MarkerCluster 1.5.3 from unpkg and uses OpenStreetMap tiles, so map assets and tiles require an internet connection.
-
-### Supabase setup
-
-The project is linked to `lemnfqjyrhirjnfukfrm`. Apply the incidents table, RLS, media bucket, Realtime publication, and daily cleanup schedule with:
+From the repository root, run:
 
 ```sh
-supabase db push
+npm --prefix resident-app install
+npm --prefix resident-app run dev
 ```
 
-Deploy the storage cleanup function:
+The resident Vite config reads the root `.env.local` during local development. Its deployment should be configured with the same Supabase URL and publishable key as the officials’ dashboard. Build it with `npm --prefix resident-app run build`.
 
-```sh
-supabase functions deploy cleanup-resolved-incident-media
-```
+For Android, use the project inside `resident-app/`: build the resident app, then run `npx cap sync android` from `resident-app/` before opening the Android project.
 
-The scheduled job runs at 03:00 Singapore time. It calls the function after the function secret and publishable key have been added to Supabase Vault. Set the same strong random value as the Edge Function secret and Vault secret; keep it out of the frontend and source control:
+## Shared Supabase setup
 
-```sh
-supabase secrets set INCIDENT_CLEANUP_SECRET="paste-the-strong-random-value-here"
-```
+The incidents table, RLS policies, private `incident-media` bucket, Realtime setup, cleanup function, and migration files are shared by both sites. Review all pending migrations in the shared project before applying them; a database migration changes the data service used by both sites.
 
-Then run these in the Supabase SQL Editor. Replace the first placeholder with the same random value and the second with the publishable key from `.env.local`:
+The cleanup function is configured at `supabase/functions/cleanup-resolved-incident-media`. Its scheduled job runs at 03:00 Singapore time. Set `INCIDENT_CLEANUP_SECRET` as a Supabase Edge Function secret and store the matching value in Vault as `incident_cleanup_secret`; store the publishable key in Vault as `incident_cleanup_publishable_key`. Keep all secret values out of frontend files and source control.
 
-```sql
-select vault.create_secret('<strong-random-value>', 'incident_cleanup_secret');
-select vault.create_secret('<publishable-key-from-.env.local>', 'incident_cleanup_publishable_key');
-```
-
-The Edge Function uses the server-side service role key from its Supabase runtime environment to remove Storage objects. The scheduled HTTP request is protected by the separate cleanup secret. It clears media paths after deleting media for resolved incidents older than 30 days; the incident rows and EIDs remain.
-
-### Map and report flow
-
-- Open **Reels**, then double-click (desktop) or double-tap (mobile) its bottom navigation item within about 300 ms to open the map. Repeat to return to the Reels feed. Reels also has an **Incident map** button.
-- Use the locate button for the map or open **Report Emergency** to request GPS. If location permission is denied, tap the map to place a pin or drag the pin to adjust it.
-- Incident photos are compressed in the browser; videos are limited to 15 seconds and 15 MB. New incident media is private to signed-in users.
-- To verify the flow, sign in, open the map, submit a report, copy its EID, then confirm its marker and popup appear. Realtime updates require the incidents migration and table in `supabase_realtime`.
+The resident map loads Leaflet and marker clustering from unpkg and uses OpenStreetMap tiles, so map assets and tiles need an internet connection.
