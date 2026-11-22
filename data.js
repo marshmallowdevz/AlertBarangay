@@ -34,6 +34,23 @@ const seed = () => ({
   settings: { notifications:{reports:true,alerts:true,residents:true}, maintenance:{'Admin Website':{enabled:false,title:'Scheduled maintenance',message:'We are making improvements. Please check back soon.',start:'',end:''},'Official Page':{enabled:false,title:'',message:'',start:'',end:''},'Resident/User Page':{enabled:false,title:'',message:'',start:'',end:''}}, maintenanceHistory:[] }
 });
 
+let notificationSequence = 0;
+function nextNotificationId() {
+  const uuid = globalThis.crypto?.randomUUID?.();
+  return uuid ? `NT-${uuid}` : `NT-${Date.now()}-${++notificationSequence}-${Math.random().toString(36).slice(2,8)}`;
+}
+function normalizeNotifications(rows) {
+  const usedIds = new Set();
+  return (Array.isArray(rows) ? rows : []).map(notification => {
+    const row = notification && typeof notification === 'object' ? notification : {};
+    let id = String(row.id || '');
+    if (!id || usedIds.has(id)) id = nextNotificationId();
+    usedIds.add(id);
+    const message = String(row.message || '');
+    const date = row.date || row.createdAt || new Date().toISOString();
+    return {...row,id,title:String(row.title || message.split(':')[0] || 'Notification'),message,date,createdAt:row.createdAt||date,read:row.read===true,recipient:String(row.recipient||'Administrator')};
+  });
+}
 function read() {
   try {
     const raw = localStorage.getItem(STORE_KEY);
@@ -41,7 +58,10 @@ function read() {
     const parsed = JSON.parse(raw);
     const initial = seed();
     const residents=(parsed.residents||initial.residents).map(r=>({...r,status:r.restricted&&r.status==='Active'?'Restricted':r.status==='Inactive'?'Active':r.status||'Active',restricted:(r.restricted||r.status==='Restricted'||r.status==='Blocked'),restrictionHistory:r.restrictionHistory||[]}));
-    return {...initial, ...parsed, residents, settings:{...initial.settings,...parsed.settings,notifications:{...initial.settings.notifications,...parsed.settings?.notifications},maintenance:{...initial.settings.maintenance,...parsed.settings?.maintenance}}};
+    const savedSettings=parsed.settings||{};
+    const maintenance={...initial.settings.maintenance,...savedSettings.maintenance};
+    for(const [name,defaults] of Object.entries(initial.settings.maintenance)) maintenance[name]={...defaults,...savedSettings.maintenance?.[name],reason:savedSettings.maintenance?.[name]?.reason||''};
+    return {...initial, ...parsed, residents, notifications:normalizeNotifications(parsed.notifications), settings:{...initial.settings,...savedSettings,notifications:{...initial.settings.notifications,...savedSettings.notifications},maintenance,maintenanceHistory:Array.isArray(savedSettings.maintenanceHistory)?savedSettings.maintenanceHistory:[]}};
   } catch (error) {
     console.error('Could not read local demo data.', error);
     return seed();
@@ -66,13 +86,18 @@ function addActivity(action, affected) {
   state.activity.unshift(row);
   const lower=action.toLowerCase();
   const preference=lower.includes('report')?state.settings.notifications?.reports:lower.includes('resident')?state.settings.notifications?.residents:lower.includes('alert')?state.settings.notifications?.alerts:true;
-  if(preference!==false) state.notifications.unshift({id:`NT-${Date.now()}`,message:`${action}: ${affected}`,date:row.date,read:false});
+  if(preference!==false) state.notifications.unshift({id:nextNotificationId(),title:String(action),message:String(affected),date:row.date,createdAt:row.date,read:false,recipient:'Administrator'});
 }
 function commit(action, affected) { addActivity(action, affected); persist(); }
 function requireSession() {
   const session=getSession();
   if(!session) throw new Error('Sign in is required for this action.');
   return session;
+}
+function requireInterfaceOpen(session) {
+  const name=session.role==='Resident'?'Resident/User Page':session.role==='Official'?'Official Page':null;
+  const maintenance=name&&state.settings.maintenance[name];
+  if(maintenance?.enabled) throw new Error(maintenance.message||`${name} is temporarily unavailable for scheduled maintenance.`);
 }
 function requireAdministrator() {
   const session=requireSession();
@@ -81,10 +106,12 @@ function requireAdministrator() {
 }
 function requireReportStaff() {
   const session=requireSession();
+  requireInterfaceOpen(session);
   if(!['Administrator','Official'].includes(session.role)) throw new Error('Only Officials or Administrators can perform report-management actions.');
   return session;
 }
 function requireOwnedSubmission(id,session) {
+  requireInterfaceOpen(session);
   const report=state.reports.find(r=>r.id===id);
   if(!report) throw new Error('Report not found.');
   if(!session.residentId||report.residentId!==session.residentId) throw new Error('Residents can only modify their own submissions.');
@@ -97,8 +124,8 @@ const store = {
   get: () => { requireAdministrator(); return state; },
   loginInfo: () => ({email:state.admin.email,password:state.admin.password}),
   listReports: () => {requireReportStaff();return clone(state.reports);},
-  getReport: id => {const session=requireSession();if(session.role==='Resident'){const report=state.reports.find(r=>r.id===id);if(!report||report.residentId!==session.residentId)throw new Error('Residents can only view their own submissions.');return clone(report);}if(!['Administrator','Official'].includes(session.role))throw new Error('Report access is not permitted.');const report=state.reports.find(r=>r.id===id);if(!report)throw new Error('Report not found.');return clone(report);},
-  listOwnReports: () => {const session=requireSession();if(session.role!=='Resident'||!session.residentId)throw new Error('Resident report access is not permitted.');return clone(state.reports.filter(r=>r.residentId===session.residentId));},
+  getReport: id => {const session=requireSession();requireInterfaceOpen(session);if(session.role==='Resident'){const report=state.reports.find(r=>r.id===id);if(!report||report.residentId!==session.residentId)throw new Error('Residents can only view their own submissions.');return clone(report);}if(!['Administrator','Official'].includes(session.role))throw new Error('Report access is not permitted.');const report=state.reports.find(r=>r.id===id);if(!report)throw new Error('Report not found.');return clone(report);},
+  listOwnReports: () => {const session=requireSession();requireInterfaceOpen(session);if(session.role!=='Resident'||!session.residentId)throw new Error('Resident report access is not permitted.');return clone(state.reports.filter(r=>r.residentId===session.residentId));},
   subscribe: fn => { listeners.add(fn); return () => listeners.delete(fn); },
   reset: () => { requireAdministrator(); state = seed(); persist(); },
   login(email,password,remember=true) {
@@ -112,9 +139,11 @@ const store = {
   updateProfile(values) { requireAdministrator();state.admin={...state.admin,...values}; try { const raw=localStorage.getItem(SESSION_KEY)||sessionStorage.getItem(SESSION_KEY); if(raw){const session=JSON.parse(raw);session.name=state.admin.name;session.email=state.admin.email;(localStorage.getItem(SESSION_KEY)?localStorage:sessionStorage).setItem(SESSION_KEY,JSON.stringify(session));} } catch {} commit('Updated admin profile',state.admin.email); },
   changePassword(oldPassword,newPassword) { requireAdministrator();if(state.admin.password!==oldPassword) throw new Error('Current password is incorrect.'); state.admin.password=newPassword; commit('Changed demo account password',state.admin.email); },
   saveSettings(settings) { requireAdministrator();state.settings={...state.settings,...settings}; commit('Updated settings','Settings'); },
-  saveMaintenance(name,config) { requireAdministrator();if(!state.settings.maintenance[name])throw new Error('Unknown maintenance platform.');state.settings.maintenance[name]={...config}; state.settings.maintenanceHistory.unshift({name,...config,changedAt:new Date().toISOString()}); commit(`Updated ${name} maintenance`,name); },
+  getMaintenance(name) {if(!state.settings.maintenance[name])throw new Error('Unknown maintenance platform.');return clone(state.settings.maintenance[name]);},
+  saveMaintenance(name,config) { const session=requireAdministrator();if(!state.settings.maintenance[name])throw new Error('Unknown maintenance platform.');const settings={...state.settings.maintenance[name],...config,enabled:Boolean(config.enabled),title:String(config.title||'').trim(),message:String(config.message||'').trim(),reason:String(config.reason||'').trim(),start:String(config.start||''),end:String(config.end||'')};const changedAt=new Date().toISOString();state.settings.maintenance[name]=settings;state.settings.maintenanceHistory.unshift({name,...clone(settings),admin:session.name,action:`${settings.enabled?'Enabled':'Disabled'} maintenance mode`,changedAt});commit(`${settings.enabled?'Enabled':'Disabled'} maintenance mode`,name); },
   saveReport(values,id=null) {
     const session=requireSession();
+    requireInterfaceOpen(session);
     if(session.role==='Resident') {
       if(id) {
         const report=requireOwnedSubmission(id,session);
