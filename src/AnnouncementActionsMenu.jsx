@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-export default function AnnouncementActionsMenu({ announcement, onEdit, onDelete, onArchive, busy }) {
+export default function AnnouncementActionsMenu({ announcement, onEdit, onArchive, busy }) {
   const [isOpen, setIsOpen] = useState(false);
   const runAction = (callback) => {
     setIsOpen(false);
@@ -15,7 +15,6 @@ export default function AnnouncementActionsMenu({ announcement, onEdit, onDelete
       {isOpen && <div className="announcement-menu" role="menu">
         <button type="button" role="menuitem" onClick={() => runAction(onEdit)}>Edit</button>
         <button type="button" role="menuitem" disabled={busy} onClick={() => runAction(onArchive)}>{announcement.is_archived ? 'Restore' : 'Archive'}</button>
-        <button type="button" role="menuitem" className="danger" disabled={busy} onClick={() => runAction(onDelete)}>Delete</button>
       </div>}
     </div>
   );

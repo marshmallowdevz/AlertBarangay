@@ -2,7 +2,7 @@ import { supabase } from './supabaseClient';
 
 const profileColumns = 'user_id, name, picture, updated_at';
 const sharedProfileColumns = 'id, name, picture, updated_at';
-const settingsColumns = 'id, emergency_phone, call_center_phone, updated_at';
+const settingsColumns = 'id, emergency_phone, call_center_phone, emergency_contacts, updated_at';
 
 export async function getOrInitializeSharedDashboardProfile() {
   const { data: existing, error: readError } = await supabase
@@ -112,12 +112,13 @@ export async function getOrInitializeDashboardContacts() {
   return settings;
 }
 
-export async function saveDashboardContacts({ emergencyPhone, callCenterPhone }) {
+export async function saveDashboardContacts({ emergencyPhone, callCenterPhone, emergencyContacts }) {
   const { data, error } = await supabase
     .from('dashboard_settings')
     .update({
       emergency_phone: emergencyPhone,
       call_center_phone: callCenterPhone,
+      emergency_contacts: emergencyContacts,
       updated_at: new Date().toISOString(),
     })
     .eq('id', 'main')

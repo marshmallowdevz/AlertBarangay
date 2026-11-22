@@ -36,9 +36,17 @@ const navItems = [
   { id: 'notifications', label: 'Notifications', icon: 'bell' },
 ];
 
-const defaultContacts = { emergency_phone: '911', call_center_phone: '0917-123-4567' };
+const defaultContacts = {
+  emergency_phone: '911',
+  call_center_phone: '0917-123-4567',
+  emergency_contacts: [
+    { id: 'emergency-line', name: 'Emergency line', phone: '911' },
+    { id: 'call-center', name: 'Call center support', phone: '0917-123-4567' },
+  ],
+};
 const defaultSharedProfile = { name: 'Captain Dela Cruz', picture: '' };
 const themeStorageKey = 'alertBarangay.theme';
+const sidebarStorageKey = 'alertBarangay.sidebarHidden';
 const themeModes = ['system', 'light', 'dark'];
 
 function readThemeMode() {
@@ -48,6 +56,10 @@ function readThemeMode() {
   } catch {
     return 'system';
   }
+}
+
+function readSidebarHidden() {
+  try { return window.localStorage.getItem(sidebarStorageKey) === 'true'; } catch { return false; }
 }
 
 function getFallbackProfile(user) {
@@ -78,6 +90,7 @@ function Official({ user, onSignOut }) {
     dispatches: [],
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarHidden, setSidebarHidden] = useState(readSidebarHidden);
   const [profileOpen, setProfileOpen] = useState(false);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [themeMode, setThemeMode] = useState(readThemeMode);
@@ -110,6 +123,7 @@ function Official({ user, onSignOut }) {
   const [profilePictureDraft, setProfilePictureDraft] = useState('');
   const [emergencyPhoneDraft, setEmergencyPhoneDraft] = useState(defaultContacts.emergency_phone);
   const [callCenterPhoneDraft, setCallCenterPhoneDraft] = useState(defaultContacts.call_center_phone);
+  const [emergencyContactDrafts, setEmergencyContactDrafts] = useState(defaultContacts.emergency_contacts);
   const [contactsFormError, setContactsFormError] = useState('');
   const [announcementTitle, setAnnouncementTitle] = useState('');
   const [announcementBody, setAnnouncementBody] = useState('');
@@ -141,6 +155,11 @@ function Official({ user, onSignOut }) {
       console.warn('Unable to save the theme preference in this browser.', error);
     }
   }, [themeMode]);
+
+  useEffect(() => {
+    try { window.localStorage.setItem(sidebarStorageKey, String(sidebarHidden)); }
+    catch (error) { console.warn('Unable to save the sidebar preference in this browser.', error); }
+  }, [sidebarHidden]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
@@ -276,6 +295,7 @@ function Official({ user, onSignOut }) {
   const openContactsEditor = () => {
     setEmergencyPhoneDraft(sharedContacts.emergency_phone || defaultContacts.emergency_phone);
     setCallCenterPhoneDraft(sharedContacts.call_center_phone || defaultContacts.call_center_phone);
+    setEmergencyContactDrafts(sharedContacts.emergency_contacts || defaultContacts.emergency_contacts);
     setContactsFormError('');
     setContactsModalOpen(true);
     setProfileOpen(false);
@@ -311,15 +331,19 @@ function Official({ user, onSignOut }) {
     event.preventDefault();
     const emergencyPhone = emergencyPhoneDraft.trim();
     const callCenterPhone = callCenterPhoneDraft.trim();
-    if (!emergencyPhone || !callCenterPhone) {
-      setContactsFormError('Enter both the emergency line and call center phone numbers.');
+    if (!emergencyPhone) {
+      setContactsFormError('Enter the emergency line phone number.');
+      return;
+    }
+    if (emergencyContactDrafts.some((contact) => !contact.name.trim() || !contact.phone.trim())) {
+      setContactsFormError('Enter a service name and phone number for every barangay contact.');
       return;
     }
 
     setContactsSaving(true);
     setContactsFormError('');
     try {
-      const savedContacts = await saveDashboardContacts({ emergencyPhone, callCenterPhone });
+      const savedContacts = await saveDashboardContacts({ emergencyPhone, callCenterPhone, emergencyContacts: emergencyContactDrafts });
       setSharedContacts(savedContacts);
       setContactsError('');
       setContactsModalOpen(false);
@@ -455,7 +479,7 @@ function Official({ user, onSignOut }) {
   };
 
   return (
-    <div className="app">
+    <div className={`app ${sidebarHidden ? 'sidebar-hidden' : ''}`}>
       {sidebarOpen && <button type="button" className="overlay" aria-label="Close menu" onClick={() => setSidebarOpen(false)} />}
 
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
@@ -464,11 +488,7 @@ function Official({ user, onSignOut }) {
           <div>
             <strong>AlertBarangay</strong>
           </div>
-          <button type="button" className="icon-btn sidebar-close" aria-label="Close navigation" onClick={() => setSidebarOpen(false)}>
-            {renderIcon('x', 18)}
-          </button>
         </div>
-
         <nav>
           {navItems.map(({ id, label, icon }) => {
             const badgeCount = id === 'dispatch' ? dispatchCount : 0;
@@ -503,7 +523,10 @@ function Official({ user, onSignOut }) {
       <main className="main">
         <header className="topbar">
           <div className="welcome">
-            <button type="button" className="icon-btn menu-btn" aria-label="Open menu" onClick={() => setSidebarOpen(true)}>
+            <button type="button" className="icon-btn menu-btn" aria-label={sidebarHidden ? 'Show sidebar' : 'Hide sidebar'} aria-expanded={!sidebarHidden} onClick={() => {
+              if (window.matchMedia('(max-width: 900px)').matches) setSidebarOpen(true);
+              else setSidebarHidden((hidden) => !hidden);
+            }}>
               {renderIcon('menu', 20)}
             </button>
             <h1>Barangay Official</h1>
@@ -633,6 +656,11 @@ function Official({ user, onSignOut }) {
               busyAnnouncementId={busyAnnouncementId}
               announcementActionError={announcementActionError}
               contacts={sharedContacts}
+              onManageContacts={openContactsEditor}
+              reports={operationalData.reports}
+              reportsLoading={reportsLoading}
+              reportsError={reportsError}
+              onRetryReports={() => { setReportsLoading(true); setReportsError(''); setReportsRetry((value) => value + 1); }}
             />
           )}
           {activeNav === 'reports' && (
@@ -651,7 +679,7 @@ function Official({ user, onSignOut }) {
             <MessagesView conversations={operationalData.conversations} onReply={replyToConversation} />
           )}
           {activeNav === 'announcements' && (
-            <AnnouncementsView announcements={announcements} loading={announcementLoading} error={announcementError} onRetry={isConfigured ? () => { setAnnouncementLoading(true); setAnnouncementError(''); setAnnouncementRetry((value) => value + 1); } : undefined} onAnnounce={openAnnouncementComposer} onEdit={canManageAnnouncements ? editAnnouncement : undefined} onDelete={canManageAnnouncements ? removeAnnouncement : undefined} onArchive={canManageAnnouncements ? changeAnnouncementArchiveState : undefined} busyAnnouncementId={busyAnnouncementId} actionError={announcementActionError} />
+            <AnnouncementsView announcements={announcements} loading={announcementLoading} error={announcementError} onRetry={isConfigured ? () => { setAnnouncementLoading(true); setAnnouncementError(''); setAnnouncementRetry((value) => value + 1); } : undefined} onAnnounce={openAnnouncementComposer} onEdit={canManageAnnouncements ? editAnnouncement : undefined} onDelete={canManageAnnouncements ? removeAnnouncement : undefined} onArchive={canManageAnnouncements ? changeAnnouncementArchiveState : undefined} busyAnnouncementId={busyAnnouncementId} actionError={announcementActionError} canManage={canManageAnnouncements} />
           )}
           {activeNav === 'notifications' && (
             <NotificationsView notifications={notifications} loading={notificationsLoading} error={notificationsError} onRetry={isConfigured ? () => { setNotificationsLoading(true); setNotificationsError(''); setNotificationsRetry((value) => value + 1); } : undefined} />
@@ -706,10 +734,18 @@ function Official({ user, onSignOut }) {
               Emergency line
               <input type="tel" value={emergencyPhoneDraft} maxLength={40} onChange={(event) => setEmergencyPhoneDraft(event.target.value)} required />
             </label>
-            <label>
-              Call center support
-              <input type="tel" value={callCenterPhoneDraft} maxLength={40} onChange={(event) => setCallCenterPhoneDraft(event.target.value)} required />
-            </label>
+            <div className="contact-editor-heading">
+              <strong>Who to call</strong>
+              <button type="button" className="btn btn-outline btn-small" onClick={() => setEmergencyContactDrafts((contacts) => [...contacts, { id: crypto.randomUUID(), name: '', phone: '' }])}>Add number</button>
+            </div>
+            <p className="muted">These numbers appear in the community contact list.</p>
+            {emergencyContactDrafts.map((contact) => (
+              <div className="contact-editor-row" key={contact.id}>
+                <label>Service name<input type="text" value={contact.name} maxLength={80} placeholder="e.g. Barangay Hall" onChange={(event) => setEmergencyContactDrafts((items) => items.map((item) => item.id === contact.id ? { ...item, name: event.target.value } : item))} required /></label>
+                <label>Phone number<input type="tel" value={contact.phone} maxLength={40} onChange={(event) => setEmergencyContactDrafts((items) => items.map((item) => item.id === contact.id ? { ...item, phone: event.target.value } : item))} required /></label>
+                <button type="button" className="btn btn-outline btn-small" aria-label={`Delete ${contact.name || 'contact'}`} onClick={() => setEmergencyContactDrafts((items) => items.filter((item) => item.id !== contact.id))}>Delete</button>
+              </div>
+            ))}
             {contactsFormError && <p className="form-error" role="alert">{contactsFormError}</p>}
             <div className="modal-actions">
               <button type="button" className="btn btn-outline" onClick={() => setContactsModalOpen(false)} disabled={contactsSaving}>Cancel</button>

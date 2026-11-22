@@ -8,7 +8,7 @@ function formatCreatedAt(announcement) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(createdAt));
 }
 
-export default function AnnouncementsView({ announcements, loading, error, onRetry, onAnnounce, onEdit, onDelete, onArchive, busyAnnouncementId, actionError }) {
+export default function AnnouncementsView({ announcements, loading, error, onRetry, onAnnounce, onEdit, onDelete, onArchive, busyAnnouncementId, actionError, canManage }) {
   const [showArchived, setShowArchived] = useState(false);
   const visibleAnnouncements = announcements.filter((item) => Boolean(item.is_archived) === showArchived);
 
@@ -18,6 +18,7 @@ export default function AnnouncementsView({ announcements, loading, error, onRet
         <div><h2>Community announcements</h2><p className="muted">Posts are shared with everyone using this dashboard.</p></div>
         <button type="button" className="btn btn-maroon" onClick={onAnnounce}>+ Announce</button>
       </div>
+      {!canManage && <p className="muted" role="status">Sign in with a barangay official account to edit, archive, or delete announcements.</p>}
       <div className="announcement-filters" aria-label="Announcement filter">
         <button type="button" className={`chip ${!showArchived ? 'active' : ''}`} aria-pressed={!showArchived} onClick={() => setShowArchived(false)}>Active</button>
         <button type="button" className={`chip ${showArchived ? 'active' : ''}`} aria-pressed={showArchived} onClick={() => setShowArchived(true)}>Archived</button>
@@ -31,7 +32,10 @@ export default function AnnouncementsView({ announcements, loading, error, onRet
           <article key={announcement.id} className="list-item announcement-item">
             <div className="announcement-heading">
               <strong>{announcement.title}</strong>
-              {onEdit && <AnnouncementActionsMenu announcement={announcement} onEdit={onEdit} onDelete={onDelete} onArchive={onArchive} busy={busyAnnouncementId === announcement.id} />}
+              {onEdit && <div className="announcement-actions">
+                <AnnouncementActionsMenu announcement={announcement} onEdit={onEdit} onArchive={onArchive} busy={busyAnnouncementId === announcement.id} />
+                <button type="button" className="link-btn danger" onClick={() => onDelete(announcement)} disabled={busyAnnouncementId === announcement.id}>Delete</button>
+              </div>}
             </div>
             <p>{announcement.body}</p>
             <small>Posted by {announcement.author} · {formatCreatedAt(announcement)}</small>

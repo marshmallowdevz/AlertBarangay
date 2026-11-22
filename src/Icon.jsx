@@ -15,6 +15,7 @@ const iconPaths = {
   settings: <><circle cx="12" cy="12" r="3" /><path d="m19.4 15 .1.1 1.4 1.1-1.4 2.4-1.7-.7a8 8 0 0 1-1.6.9L16 20.5h-3l-.3-1.8a8 8 0 0 1-1.7-.9l-1.6.7L8 16.1l1.4-1.1a7 7 0 0 1 0-1.9L8 12l1.4-2.4 1.6.7a8 8 0 0 1 1.7-.9L13 7.5h3l.2 1.9a8 8 0 0 1 1.6.9l1.7-.7 1.4 2.4-1.4 1.1a7 7 0 0 1-.1 1.9Z" transform="translate(-1 -2)" /></>,
   logout: <><path d="M10 17l5-5-5-5m5 5H3" /><path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7" /></>,
   phone: <path d="M5 3h4l2 5-2.5 1.5a14 14 0 0 0 6 6L16 13l5 2v4a2 2 0 0 1-2 2A17 17 0 0 1 3 5a2 2 0 0 1 2-2Z" />,
+  copy: <><rect x="8" y="8" width="13" height="13" rx="2" /><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" /></>,
   plus: <path d="M12 5v14m-7-7h14" />,
   flame: <path d="M12 22a7 7 0 0 0 7-7c0-4-3-6-4-10-2 2-3 4-3 6-2-1-3-3-3-5-2 2-4 5-4 9a7 7 0 0 0 7 7Z" />,
   location: <><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z" /><circle cx="12" cy="10" r="2.5" /></>,
@@ -26,6 +27,10 @@ const iconPaths = {
   x: <path d="m6 6 12 12M18 6 6 18" />,
   response: <><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z" /><path d="M12 8v8m-4-4h8" /></>,
   fire: <path d="M12 22a7 7 0 0 0 7-7c0-4-3-6-4-10-2 2-3 4-3 6-2-1-3-3-3-5-2 2-4 5-4 9a7 7 0 0 0 7 7Z" />,
+  trash: <><path d="M3 6h18m-2 0-.9 14H5.9L5 6m4 0V4h6v2m-5 4v6m4-6v6" /></>,
+  electric: <path d="m13 2-9 12h7l-1 8 10-13h-7l1-7Z" />,
+  water: <><path d="M12 3C9 7 5 11 5 15a7 7 0 0 0 14 0c0-4-4-8-7-12Z" /><path d="M9 16a3 3 0 0 0 3 3" /></>,
+  road: <><path d="m8 3-4 18m12-18 4 18M12 5v3m0 4v3m0 4v2" /></>,
 };
 
 export default function Icon({ name, size = 18, className }) {
