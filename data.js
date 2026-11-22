@@ -175,7 +175,7 @@ const store = {
   updateAlert(id,values,action) {requireAdministrator();const a=state.alerts.find(x=>x.id===id);if(!a)throw new Error('Alert not found.');Object.assign(a,values);commit(action,id);},
   deleteDraft(id) {requireAdministrator();const a=state.alerts.find(x=>x.id===id);if(!a||a.status!=='Draft')throw new Error('Only drafts can be deleted.');if(!confirm('Delete this alert draft?'))return false;state.alerts=state.alerts.filter(x=>x.id!==id);commit('Deleted alert draft',id);return true;},
   markNotificationRead(id){requireAdministrator();const notification=state.notifications.find(n=>n.id===id);if(notification&&!notification.read){notification.read=true;persist();}},
-  markNotificationsRead(){requireAdministrator();state.notifications.forEach(n=>n.read=true);persist();},
+  markNotificationsRead(){requireAdministrator();const unread=state.notifications.filter(n=>!n.read);if(!unread.length)return false;unread.forEach(n=>{n.read=true});persist();return true;},
   setAdminName(name){requireAdministrator();state.admin.name=name;persist();}
 };
 function getSession(){try{const session=JSON.parse(localStorage.getItem(SESSION_KEY)||sessionStorage.getItem(SESSION_KEY)||'null');if(!session)return null;if(!session.role)session.role=session.email?.toLowerCase()===state.admin.email.toLowerCase()?'Administrator':'Resident';return session;}catch{return null;}}
