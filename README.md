@@ -1,26 +1,35 @@
-# React + Vite
+# Alert Barangay
 
-## Official dashboard access
+This repository contains two separate sites connected to the same Supabase project:
 
-- Sign-in is disabled by default so the dashboard opens directly. In this mode, the profile is shared, and anonymous visitors can post announcements, edit the shared contact numbers, and create dispatch records.
-- After an admin account-management flow is ready, set `VITE_REQUIRE_AUTH=true` to restore the login gate. Before enabling it, add and apply a security migration that restricts anonymous announcement, contact, and dispatch writes.
-- Configure `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` in `.env.local`.
-- Apply the SQL migrations in `supabase/migrations` to the Supabase project before using login, profiles, or shared contacts. This repository does not apply migrations to the hosted project automatically.
-- Create official accounts in Supabase Auth. Each account needs the trusted app metadata claim `{"barangay_role":"official"}`; public sign-up is not available in the app.
-- With auth enabled, this branch uses `/login` and `/dashboard`. Its `/` path redirects to login until the landing-page branch is merged; after merging, mount `AuthApp` with the landing page component (for example, `<AuthApp LandingPage={LandingPage} />`) and link its sign-in action to `/login`.
-- The web host must serve the SPA entry point for `/login` and `/dashboard` so direct visits and reloads resolve to the app.
+- **Officials’ desktop dashboard** is the root Vite app. Its entrypoint is `src/main.jsx` and it loads `AuthApp`.
+- **Residents’ mobile/web app** is the independent Vite and Capacitor project in `resident-app/`. Its entrypoint is `resident-app/src/main.jsx` and it loads the resident reporting UI and incident map.
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The sites keep separate entrypoints and access flows. Supabase Row Level Security and the officials app’s role checks control access to their shared data. Database migrations and Edge Functions live once at the repository root under `supabase/` because they affect the shared project.
 
-Currently, two official plugins are available:
+## Run the officials’ dashboard
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+1. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`.
+2. From the repository root, run `npm install` and `npm run dev`.
+3. Set `VITE_REQUIRE_AUTH=true` in the officials site’s deployment to require official sign-in. Official accounts need the trusted `app_metadata` claim `{"barangay_role":"official"}`.
 
-## React Compiler
+## Run the residents’ app
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+From the repository root, run:
 
-## Expanding the ESLint configuration
+```sh
+npm --prefix resident-app install
+npm --prefix resident-app run dev
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+The resident Vite config reads the root `.env.local` during local development. Its deployment should be configured with the same Supabase URL and publishable key as the officials’ dashboard. Build it with `npm --prefix resident-app run build`.
+
+For Android, use the project inside `resident-app/`: build the resident app, then run `npx cap sync android` from `resident-app/` before opening the Android project.
+
+## Shared Supabase setup
+
+The incidents table, RLS policies, private `incident-media` bucket, Realtime setup, cleanup function, and migration files are shared by both sites. Review all pending migrations in the shared project before applying them; a database migration changes the data service used by both sites.
+
+The cleanup function is configured at `supabase/functions/cleanup-resolved-incident-media`. Its scheduled job runs at 03:00 Singapore time. Set `INCIDENT_CLEANUP_SECRET` as a Supabase Edge Function secret and store the matching value in Vault as `incident_cleanup_secret`; store the publishable key in Vault as `incident_cleanup_publishable_key`. Keep all secret values out of frontend files and source control.
+
+The resident map loads Leaflet and marker clustering from unpkg and uses OpenStreetMap tiles, so map assets and tiles need an internet connection.
