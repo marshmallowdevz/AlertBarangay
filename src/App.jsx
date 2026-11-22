@@ -1,33 +1,37 @@
 import { useState, useEffect, useRef, Fragment } from "react";
 import {
   Home, FileText, Megaphone, Bell, ShieldCheck, Phone, CircleUserRound, Clapperboard, MessageSquare,
-  Flame, Waves, Car, Zap, Trash2, MapPin, Droplets, ClipboardList, Clock,
-  CheckCircle2, ChevronDown, ChevronRight, X, LogOut, User, Shield, Copy,
+  Flame, Waves, Car, Zap, Trash2, MapPin, Droplets, HeartPulse, ClipboardList, Clock,
+  CheckCircle2, ChevronDown, ChevronRight, LogOut, User, Shield, Copy,
   LockKeyhole, Info, Sun, CalendarDays, CircleHelp, ImagePlus, Languages,
   ArrowLeft, Eye, EyeOff,
 } from "lucide-react";
 import { supabase, isConfigured, configError } from "./supabaseClient";
 import "./App.css";
 import "./landing.css";
-import MediaPicker, { ReportMedia } from "./MediaPicker";
-import { getCurrentAddress } from "./location";
+import { ReportMedia } from "./MediaPicker";
 import { uploadReportMedia } from "./media";
+import ReelsMapView from "./ReelsMapView";
 
 const HOTLINE = "(02) 8123-4567";
 const HOTLINE_TEL = "tel:0281234567";
 
 const EMERGENCY_TYPES = [
-  { key: "Fire", icon: Flame, color: "#c0392b" },
-  { key: "Flood", icon: Waves, color: "#1f7a99" },
-  { key: "Accident", icon: Car, color: "#b03a2e" },
-  { key: "Electrical Hazard", icon: Zap, color: "#c9a227" },
-  { key: "Garbage Collection", icon: Trash2, color: "#5a0f24" },
-  { key: "Road Damage", icon: MapPin, color: "#5a0f24" },
-  { key: "Water Problems", icon: Droplets, color: "#1f7a99" },
+  { key: "Fire", incidentType: "fire", icon: Flame, color: "#c0392b" },
+  { key: "Medical", incidentType: "medical", icon: HeartPulse, color: "#d94b73" },
+  { key: "Flood", incidentType: "flood", icon: Waves, color: "#1f7a99" },
+  { key: "Accident", incidentType: "accident", icon: Car, color: "#b03a2e" },
+  { key: "Electrical Hazard", incidentType: "electrical_hazard", icon: Zap, color: "#c9a227" },
+  { key: "Garbage Collection", incidentType: "garbage_collection", icon: Trash2, color: "#3aa66a" },
+  { key: "Road Damage", incidentType: "road_damage", icon: MapPin, color: "#8d69d8" },
+  { key: "Water Problems", incidentType: "water_problems", icon: Droplets, color: "#1f7a99" },
 ];
 
-const iconFor = (type) =>
-  (EMERGENCY_TYPES.find((t) => t.key === type) || EMERGENCY_TYPES[0]).icon;
+const iconFor = (type) => EMERGENCY_TYPES.find((item) =>
+  item.incidentType === type || item.key.toLowerCase() === String(type).toLowerCase()
+)?.icon || CircleHelp;
+
+const incidentLabel = (type) => EMERGENCY_TYPES.find((item) => item.incidentType === type)?.key || type;
 
 const ANNOUNCEMENTS = [
   { id: 1, title: "Barangay clean-up drive", body: "Join us this Saturday, 7:00 AM at the barangay hall. Gloves and bags provided.", date: "May 21, 2025" },
@@ -93,7 +97,7 @@ const FILIPINO = {
   "Choose how AlertBarangay looks on this device.": "Piliin ang itsura ng AlertBarangay sa device na ito.", "Appointments": "Mga Appointment",
   "Barangay appointment booking is not available yet. Contact the barangay hall for assistance.": "Hindi pa available ang pag-book ng appointment sa barangay. Makipag-ugnayan sa barangay hall para sa tulong.",
   "Support": "Suporta", "Help Center": "Sentro ng Tulong", "Log out": "Mag-log out", "Resident": "Residente",
-  "Fire": "Sunog", "Flood": "Baha", "Accident": "Aksidente", "Electrical Hazard": "Panganib sa Kuryente", "Garbage Collection": "Koleksyon ng Basura", "Road Damage": "Sirang Kalsada", "Water Problems": "Problema sa Tubig",
+  "Fire": "Sunog", "Medical": "Medikal", "Flood": "Baha", "Accident": "Aksidente", "Electrical Hazard": "Panganib sa Kuryente", "Garbage Collection": "Koleksyon ng Basura", "Road Damage": "Sirang Kalsada", "Water Problems": "Problema sa Tubig",
 };
 
 const tr = (text, language) => language === "fil" ? (FILIPINO[text] || text) : text;
@@ -114,11 +118,28 @@ const toReport = (row, userId) => ({
   media: row.media_urls || [],
   status: row.status,
   date: fmtDate(row.created_at),
+  createdAt: row.created_at,
   mine: row.user_id === userId,
+  source: "legacy",
   history: (row.report_history || [])
     .slice()
     .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
     .map((h) => ({ status: h.status, date: fmtDate(h.created_at) })),
+});
+
+const toIncidentReport = (row, userId) => ({
+  id: row.id,
+  type: incidentLabel(row.type),
+  location: `${Number(row.lat).toFixed(6)}, ${Number(row.lng).toFixed(6)}`,
+  severity: null,
+  description: row.description,
+  media: [],
+  status: row.status === "responding" ? "In Progress" : row.status[0].toUpperCase() + row.status.slice(1),
+  date: fmtDate(row.created_at),
+  createdAt: row.created_at,
+  mine: row.reporter_id === userId,
+  source: "incident",
+  history: [],
 });
 
 const toNotification = (row) => ({
@@ -129,11 +150,20 @@ const toNotification = (row) => ({
 });
 
 async function fetchReports(userId) {
-  const { data, error } = await supabase
-    .from("reports")
-    .select("*, report_history(status, created_at)")
-    .order("created_at", { ascending: false });
-  return { error, reports: (data || []).map((r) => toReport(r, userId)) };
+  const [legacyResult, incidentResult] = await Promise.all([
+    supabase.from("reports")
+      .select("*, report_history(status, created_at)")
+      .order("created_at", { ascending: false }),
+    supabase.from("incidents")
+      .select("id, type, description, lat, lng, status, reporter_id, created_at")
+      .eq("reporter_id", userId)
+      .order("created_at", { ascending: false }),
+  ]);
+  const reports = [
+    ...(legacyResult.data || []).map((row) => toReport(row, userId)),
+    ...(incidentResult.data || []).map((row) => toIncidentReport(row, userId)),
+  ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  return { error: legacyResult.error || incidentResult.error, reports };
 }
 
 async function fetchNotifications() {
@@ -169,6 +199,9 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [authReady, setAuthReady] = useState(false);
   const [page, setPage] = useState("dashboard");
+  const [mapOpen, setMapOpen] = useState(false);
+  const [mapLaunchOptions, setMapLaunchOptions] = useState({ openReport: false, type: "" });
+  const lastReelsTapRef = useRef(0);
   const [reports, setReports] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [user, setUser] = useState({ name: "Resident", role: "Resident" });
@@ -180,7 +213,6 @@ export default function App() {
     try { return localStorage.getItem("alertbarangay-language") || "en"; }
     catch { return "en"; }
   });
-  const [modalType, setModalType] = useState(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [toast, setToast] = useState("");
   const [communityPosts, setCommunityPosts] = useState([]);
@@ -322,41 +354,49 @@ export default function App() {
   const resolved = myReports.filter((r) => r.status === "Resolved").length;
   const unread = notifications.filter((n) => !n.read).length;
 
-  const goTo = (key) => {
+  const goTo = (key, { preserveMap = false } = {}) => {
     setPage(key);
+    if (!preserveMap) setMapOpen(false);
     setProfileOpen(false);
     window.scrollTo(0, 0);
   };
 
-  // Returns an error message (shown in the form) or null when it worked.
-  const submitReport = async ({ type, location, severity, description, mediaFiles }) => {
-    let media_urls = [];
-    if (mediaFiles && mediaFiles.length > 0) {
-      try {
-        media_urls = await uploadReportMedia(supabase, userId, mediaFiles);
-      } catch {
-        return "Could not upload your photos or videos. Check your connection and try again.";
-      }
+  const handleNavClick = (key) => {
+    if (key !== "reels") {
+      lastReelsTapRef.current = 0;
+      goTo(key);
+      return;
     }
 
-    const { error } = await supabase
-      .from("reports")
-      .insert({ type, location, severity, description, media_urls });
-    if (error) return "Could not submit your report. Please try again.";
+    const now = Date.now();
+    const isDoubleTap = now - lastReelsTapRef.current <= 300;
+    lastReelsTapRef.current = isDoubleTap ? 0 : now;
+    goTo("reels", { preserveMap: true });
+    if (isDoubleTap) {
+      setMapLaunchOptions({ openReport: false, type: "" });
+      setMapOpen((open) => !open);
+    }
+  };
 
-    await supabase
-      .from("notifications")
-      .insert({ message: `Your ${type} report in ${location} was submitted.` });
+  const openEmergencyReport = (type = "") => {
+    setMapLaunchOptions({ openReport: true, type });
+    setMapOpen(true);
+  };
 
-    const [reportResult, notificationResult] = await Promise.all([
-      fetchReports(userId),
-      fetchNotifications(),
-    ]);
-    setReports(reportResult.reports);
-    setNotifications(notificationResult.notifications);
-    setModalType(null);
-    setToast(`${type} report submitted.`);
-    return null;
+  const openIncidentMap = () => {
+    setMapLaunchOptions({ openReport: false, type: "" });
+    setMapOpen(true);
+  };
+
+  const closeIncidentMap = () => {
+    setMapOpen(false);
+    setMapLaunchOptions({ openReport: false, type: "" });
+  };
+
+  const handleIncidentSubmitted = async () => {
+    const result = await fetchReports(userId);
+    setReports(result.reports);
+    setToast("Emergency report submitted.");
   };
 
   const cancelReport = async (id) => {
@@ -606,7 +646,7 @@ export default function App() {
               resolved={resolved}
               unread={unread}
               goTo={goTo}
-              openReport={setModalType}
+              openReport={openEmergencyReport}
               language={language}
             />
           )}
@@ -615,7 +655,7 @@ export default function App() {
             <section className="card">
               <h2>{tr("Report an Emergency", language)}</h2>
               <p className="muted">{tr("Choose what you would like to report.", language)}</p>
-              <TypeGrid onPick={setModalType} language={language} />
+              <TypeGrid onPick={openEmergencyReport} language={language} />
             </section>
           )}
 
@@ -740,8 +780,14 @@ export default function App() {
           {page === "reels" && (
             <section className="reels-page">
               <div className="card reels-compose">
-                <h2>{tr("Community Reels", language)}</h2>
-                <p className="muted">{tr("Share photos and videos with residents.", language)}</p>
+                <div className="card-head reels-heading">
+                  <div>
+                    <h2>{tr("Community Reels", language)}</h2>
+                    <p className="muted">{tr("Share photos and videos with residents.", language)}</p>
+                  </div>
+                  <button type="button" className="btn btn-outline reels-map-link" onClick={openIncidentMap}><MapPin size={16} /> Incident map</button>
+                </div>
+                <p className="hint reels-map-hint">Double-tap Reels in the bottom navigation to open or close the live incident map.</p>
                 <form onSubmit={publishReel} className="reel-form">
                   <label>{tr("Photo or video", language)}<input type="file" accept="image/*,video/*" onChange={(e) => setPostFile(e.target.files?.[0] || null)} required /></label>
                   <label>{tr("Caption", language)}<textarea value={postCaption} onChange={(e) => setPostCaption(e.target.value)} rows={2} maxLength={500} placeholder={tr("What's happening in your community?", language)} /></label>
@@ -764,12 +810,19 @@ export default function App() {
         </main>
       </div>
 
-      {modalType && (
-        <ReportModal type={modalType} language={language} onClose={() => setModalType(null)} onSubmit={submitReport} />
-      )}
       {toast && <div className="toast" role="status">{toast}</div>}
+      {mapOpen && (
+        <ReelsMapView
+          userId={userId}
+          onClose={closeIncidentMap}
+          returnLabel={page === "reels" ? "Reels" : "Back"}
+          initialReportOpen={mapLaunchOptions.openReport}
+          initialReportType={mapLaunchOptions.type}
+          onReportSubmitted={handleIncidentSubmitted}
+        />
+      )}
       <nav className="bottom-nav" aria-label="Main navigation">
-        {PAGES.map(({ key, label, icon: Icon }) => <button key={key} className={`bottom-nav-item ${page === key ? "active" : ""}`} onClick={() => goTo(key)} aria-current={page === key ? "page" : undefined}><span className="bottom-nav-icon"><Icon size={22} /></span><span>{tr(label, language)}</span></button>)}
+        {PAGES.map(({ key, label, icon: Icon }) => <button key={key} className={`bottom-nav-item ${page === key ? "active" : ""}`} onClick={() => handleNavClick(key)} aria-label={key === "reels" ? "Reels; double-tap to toggle incident map" : label} title={key === "reels" ? "Double-tap to toggle the live incident map" : undefined} aria-current={page === key ? "page" : undefined}><span className="bottom-nav-icon"><Icon size={22} /></span><span>{tr(label, language)}</span></button>)}
       </nav>
     </div>
   );
@@ -829,8 +882,8 @@ function DashboardPage({ myCount, inProgress, resolved, unread, goTo, openReport
 function TypeGrid({ onPick, language = "en" }) {
   return (
     <div className="type-grid">
-      {EMERGENCY_TYPES.map(({ key, icon: Icon }) => (
-        <button key={key} className={`type-tile type-${key.toLowerCase().replace(/\s+/g, "-")}`} onClick={() => onPick(key)}>
+      {EMERGENCY_TYPES.map(({ key, incidentType, icon: Icon }) => (
+        <button key={key} className={`type-tile type-${key.toLowerCase().replace(/\s+/g, "-")}`} onClick={() => onPick(incidentType)}>
           <span className="type-icon"><Icon size={34} strokeWidth={2.2} /></span>
           <span>{tr(key, language)}</span>
         </button>
@@ -861,7 +914,7 @@ function ReportTable({ rows, onCancel, empty, language = "en" }) {
                 <tr>
                   <td><span className="type-cell"><span className="report-type-icon"><Icon size={15} /></span><strong>{tr(r.type, language)}</strong></span></td>
                   <td>{r.location}</td>
-                  <td><span className={`pill sev-${r.severity.toLowerCase()}`}>{tr(r.severity, language)}</span></td>
+                  <td>{r.severity ? <span className={`pill sev-${r.severity.toLowerCase()}`}>{tr(r.severity, language)}</span> : "—"}</td>
                   <td><span className={`pill st-${r.status.replace(" ", "").toLowerCase()}`}>{tr(r.status, language)}</span></td>
                   <td className="reported-at">{(() => { const parts = r.date.match(/^(.*), (\d{1,2}:\d{2} [AP]M)$/); return parts ? <><span>{parts[1]}</span><small>{parts[2]}</small></> : r.date; })()}</td>
                   {detailed && (
@@ -869,7 +922,7 @@ function ReportTable({ rows, onCancel, empty, language = "en" }) {
                       <button className="btn btn-outline report-details-btn" onClick={() => setOpenId(open ? null : r.id)}>
                         {open ? tr("Hide details", language) : tr("Details", language)}
                       </button>
-                      {r.status === "Pending" && (
+                      {r.source !== "incident" && r.status === "Pending" && (
                         <button className="link-btn danger" onClick={() => onCancel(r.id)}>{tr("Cancel", language)}</button>
                       )}
                     </td>
@@ -896,137 +949,6 @@ function ReportTable({ rows, onCancel, empty, language = "en" }) {
           })}
         </tbody>
       </table>
-    </div>
-  );
-}
-
-/* ---------- Report modal ---------- */
-
-function ReportModal({ type, language = "en", onClose, onSubmit }) {
-  const [location, setLocation] = useState("");
-  const [severity, setSeverity] = useState("Medium");
-  const [description, setDescription] = useState("");
-  const [mediaFiles, setMediaFiles] = useState([]);
-  const [error, setError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [locating, setLocating] = useState(false);
-
-  useEffect(() => {
-    const onKey = (e) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  const fillCurrentLocation = async () => {
-    setError("");
-    setLocating(true);
-    try {
-      const { address } = await getCurrentAddress();
-      if (address) {
-        setLocation(address);
-      } else {
-        setError("We found you, but not the street name. Please type your location.");
-      }
-    } catch {
-      setError("Could not get your location. Allow location access or type it in.");
-    } finally {
-      setLocating(false);
-    }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!location.trim()) {
-      setError("Enter the location of the incident.");
-      return;
-    }
-    if (description.trim().length < 5) {
-      setError("Add a short description (at least 5 characters).");
-      return;
-    }
-    setError("");
-    setSubmitting(true);
-    const problem = await onSubmit({
-      type,
-      location: location.trim(),
-      severity,
-      description: description.trim(),
-      mediaFiles,
-    });
-    if (problem) {
-      setError(problem);
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <form className="modal" onSubmit={handleSubmit}>
-        <div className="card-head">
-          <h2>{language === "fil" ? "Ulat:" : "Report:"} {tr(type, language)}</h2>
-          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close">
-            <X size={20} />
-          </button>
-        </div>
-
-        <label>
-          {tr("Location", language)}
-          <input
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            placeholder="e.g. Zone 4, near the basketball court"
-            autoFocus
-          />
-        </label>
-        <button
-          type="button"
-          className="link-btn"
-          onClick={fillCurrentLocation}
-          disabled={locating}
-        >
-          <MapPin size={14} /> {locating ? "Finding your address…" : "Use my current location"}
-        </button>
-
-        <label>
-          {tr("Severity", language)}
-          <select value={severity} onChange={(e) => setSeverity(e.target.value)}>
-            <option value="Low">{tr("Low", language)}</option>
-            <option value="Medium">{tr("Medium", language)}</option>
-            <option value="High">{tr("High", language)}</option>
-          </select>
-        </label>
-
-        <label>
-          {language === "fil" ? "Ano ang nangyari?" : "What happened?"}
-          <textarea
-            rows={4}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Describe the situation"
-          />
-        </label>
-
-        <MediaPicker
-          files={mediaFiles}
-          onChange={setMediaFiles}
-          onError={setError}
-          disabled={submitting}
-        />
-
-        {error && <p className="form-error">{error}</p>}
-        {severity === "High" && (
-          <p className="hint">For life-threatening emergencies, also call {HOTLINE}.</p>
-        )}
-
-        <div className="modal-actions">
-          <button type="button" className="btn btn-outline" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn btn-maroon" disabled={submitting}>
-            {submitting ? "Submitting…" : "Submit report"}
-          </button>
-        </div>
-      </form>
     </div>
   );
 }

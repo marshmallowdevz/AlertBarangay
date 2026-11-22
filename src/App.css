@@ -267,6 +267,10 @@ nav { display: flex; flex-direction: column; gap: 6px; }
 .message-form-footer small { color: var(--muted); }
 .message-inbox { margin-top: 32px; }
 .reels-page, .reel-feed { display: grid; gap: 18px; }
+.reels-heading { align-items: center; margin-bottom: 0; }
+.reels-heading p { margin: 5px 0 0; }
+.reels-map-link { display: inline-flex; align-items: center; justify-content: center; gap: 7px; white-space: nowrap; }
+.reels-map-hint { margin: -5px 0 0; }
 .reel-form, .announcement-form { display: grid; gap: 12px; margin-top: 16px; }
 .reel-form label, .announcement-form { display: grid; gap: 8px; }
 .reel-form input, .reel-form textarea, .announcement-form input, .announcement-form textarea { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: #fff; font: inherit; }
@@ -380,6 +384,7 @@ nav { display: flex; flex-direction: column; gap: 6px; }
   transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
 }
 .type-fire { --tile-accent: #ef563f; }
+.type-medical { --tile-accent: #e95b8a; }
 .type-flood { --tile-accent: #4a9fe0; }
 .type-accident { --tile-accent: #e65f6b; }
 .type-electrical-hazard { --tile-accent: #e1b72f; }
@@ -534,6 +539,8 @@ label.toggle input { width: 18px; height: 18px; accent-color: var(--maroon); }
   .main { padding-bottom: 88px; }
   .content { padding-bottom: 20px; }
   .reels-compose { padding: 18px; }
+  .reels-heading { align-items: flex-start; gap: 10px; }
+  .reels-map-link { padding: 8px 10px; font-size: .76rem; }
 }
 
 /* ---------- Report details ---------- */

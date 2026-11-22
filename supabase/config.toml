@@ -1,0 +1,4 @@
+project_id = "lemnfqjyrhirjnfukfrm"
+
+[functions.cleanup-resolved-incident-media]
+verify_jwt = false
