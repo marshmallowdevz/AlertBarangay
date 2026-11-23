@@ -8,6 +8,12 @@ type Metrics = { total: number; admins: number; officials: number; residents: nu
 type DialogState = { type: "create" } | { type: "edit"; user: ManagedUser } | { type: "password"; user: ManagedUser } | { type: "delete"; user: ManagedUser } | null;
 const emptyMetrics: Metrics = { total: 0, admins: 0, officials: 0, residents: 0, active: 0, disabled: 0 };
 const emptyDraft: UserDraft = { email: "", password: "", full_name: "", role: "resident", position: "", department: "" };
+const previewUsers: ManagedUser[] = [
+  { id: "preview-admin", email: "alex.reyes@example.test", full_name: "Alex Reyes", role: "admin", position: "Barangay Captain", department: "Administration", is_active: true, created_at: "2026-01-15T08:00:00.000Z", last_sign_in_at: "2026-11-20T08:00:00.000Z" },
+  { id: "preview-official", email: "jamie.santos@example.test", full_name: "Jamie Santos", role: "official", position: "Health Officer", department: "Health & Safety", is_active: true, created_at: "2026-02-10T08:00:00.000Z", last_sign_in_at: "2026-11-18T08:00:00.000Z" },
+  { id: "preview-resident", email: "taylor.cruz@example.test", full_name: "Taylor Cruz", role: "resident", position: null, department: null, is_active: true, created_at: "2026-03-05T08:00:00.000Z", last_sign_in_at: null },
+  { id: "preview-disabled", email: "morgan.diaz@example.test", full_name: "Morgan Diaz", role: "resident", position: null, department: null, is_active: false, created_at: "2026-04-22T08:00:00.000Z", last_sign_in_at: "2026-08-03T08:00:00.000Z" },
+];
 
 function initials(name: string, email: string) {
   const source = name.trim() || email;
@@ -19,7 +25,7 @@ function dateText(value: string) {
   return new Intl.DateTimeFormat("en-PH", { year: "numeric", month: "short", day: "numeric" }).format(new Date(value));
 }
 
-export function UsersDashboard({ currentUserId }: { currentUserId: string }) {
+export function UsersDashboard({ currentUserId, previewMode = false }: { currentUserId: string; previewMode?: boolean }) {
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [metrics, setMetrics] = useState<Metrics>(emptyMetrics);
   const [search, setSearch] = useState("");
@@ -38,6 +44,26 @@ export function UsersDashboard({ currentUserId }: { currentUserId: string }) {
 
   const loadUsers = useCallback(async () => {
     setLoading(true); setLoadError(""); setUsers([]);
+    if (previewMode) {
+      const query = search.trim().toLocaleLowerCase();
+      const filteredUsers = previewUsers.filter((user) => {
+        const matchesQuery = !query || `${user.email} ${user.full_name}`.toLocaleLowerCase().includes(query);
+        const matchesRole = role === "all" || user.role === role;
+        const matchesStatus = status === "all" || (status === "active" ? user.is_active : !user.is_active);
+        return matchesQuery && matchesRole && matchesStatus;
+      });
+      setUsers(filteredUsers);
+      setMetrics({
+        total: previewUsers.length,
+        admins: previewUsers.filter((user) => user.role === "admin").length,
+        officials: previewUsers.filter((user) => user.role === "official").length,
+        residents: previewUsers.filter((user) => user.role === "resident").length,
+        active: previewUsers.filter((user) => user.is_active).length,
+        disabled: previewUsers.filter((user) => !user.is_active).length,
+      });
+      setLoading(false);
+      return;
+    }
     const params = new URLSearchParams();
     if (search.trim()) params.set("q", search.trim());
     if (role !== "all") params.set("role", role);
@@ -50,7 +76,7 @@ export function UsersDashboard({ currentUserId }: { currentUserId: string }) {
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "Unable to load user accounts.");
     } finally { setLoading(false); }
-  }, [search, role, status]);
+  }, [previewMode, search, role, status]);
 
   useEffect(() => {
     const timer = setTimeout(() => { void loadUsers(); }, 220);
@@ -122,8 +148,8 @@ export function UsersDashboard({ currentUserId }: { currentUserId: string }) {
 
   return <div className="page-wrap">
     <div className="topline"><div className="breadcrumb"><span>Workspace</span><span className="crumb-dot">/</span><strong>User management</strong></div><div className="top-actions"><button className="icon-button" aria-label="Notifications"><Bell size={17} /><span className="notification-dot" /></button><span className="mini-avatar">AB</span></div></div>
-    <div className="page-heading"><div><div className="eyebrow">ADMINISTRATION</div><h1>User management</h1><p className="subtitle">Create accounts and manage access to the AlertBarangay dashboard.</p></div><button className="button primary" onClick={openCreate}><Plus size={16} strokeWidth={2.5} />Create account</button></div>
-    <div className="notice"><Shield size={18} /><div><strong>Account access is managed centrally</strong><p>New accounts can sign in to connected AlertBarangay dashboards using their assigned email and password.</p></div></div>
+    <div className="page-heading"><div><div className="eyebrow">ADMINISTRATION</div><h1>User management</h1><p className="subtitle">Create accounts and manage access to the AlertBarangay dashboard.</p></div><button className="button primary" onClick={openCreate} disabled={previewMode}><Plus size={16} strokeWidth={2.5} />Create account</button></div>
+    <div className="notice"><Shield size={18} /><div><strong>{previewMode ? "Preview mode — sample data" : "Account access is managed centrally"}</strong><p>{previewMode ? "This page is showing local demo accounts. Account changes are disabled in preview mode." : "New accounts can sign in to connected AlertBarangay dashboards using their assigned email and password."}</p></div></div>
     <section className="overview-card" aria-label="Account overview">
       <div className="overview-top"><h2 className="section-title">Account overview</h2><span className="section-note">All registered accounts</span></div>
       <div className="overview-total"><strong>{metrics.total.toLocaleString()}</strong><span>Total users created</span></div>
@@ -142,13 +168,13 @@ export function UsersDashboard({ currentUserId }: { currentUserId: string }) {
           <select className="filter-select" aria-label="Filter by status" value={status} onChange={(e) => setStatus(e.target.value)}><option value="all">All status</option><option value="active">Active</option><option value="disabled">Disabled</option></select>
         </div>
       </div>
-      {loading ? <div className="loading-state" aria-label="Loading user accounts"><div className="skeleton" /><div className="skeleton" /><div className="skeleton" /></div> : loadError ? <div className="empty-state"><div className="empty-icon"><CircleAlert size={20} /></div><strong>Couldn't load accounts</strong><p>{loadError}</p><button className="button secondary" style={{ marginTop: 14 }} onClick={() => void loadUsers()}>Try again</button></div> : users.length === 0 ? <div className="empty-state"><div className="empty-icon"><Users size={20} /></div><strong>{search || role !== "all" || status !== "all" ? "No matching accounts" : "No accounts yet"}</strong><p>{search || role !== "all" || status !== "all" ? "Try changing your filters or search terms." : "Create an account to get started."}</p>{!search && role === "all" && status === "all" && <button className="button primary" style={{ marginTop: 14 }} onClick={openCreate}><Plus size={15} />Create account</button>}</div> : <>
+      {loading ? <div className="loading-state" aria-label="Loading user accounts"><div className="skeleton" /><div className="skeleton" /><div className="skeleton" /></div> : loadError ? <div className="empty-state"><div className="empty-icon"><CircleAlert size={20} /></div><strong>Couldn't load accounts</strong><p>{loadError}</p><button className="button secondary" style={{ marginTop: 14 }} onClick={() => void loadUsers()}>Try again</button></div> : users.length === 0 ? <div className="empty-state"><div className="empty-icon"><Users size={20} /></div><strong>{search || role !== "all" || status !== "all" ? "No matching accounts" : "No accounts yet"}</strong><p>{search || role !== "all" || status !== "all" ? "Try changing your filters or search terms." : "Create an account to get started."}</p>{!previewMode && !search && role === "all" && status === "all" && <button className="button primary" style={{ marginTop: 14 }} onClick={openCreate}><Plus size={15} />Create account</button>}</div> : <>
         <div className="table-scroll"><table className="user-table"><thead><tr><th>User</th><th>Role</th><th>Position / department</th><th>Status</th><th>Created</th><th>Last sign in</th><th aria-label="Actions" /></tr></thead><tbody>
           {users.map((user) => <tr key={user.id}><td><div className="user-cell"><span className="user-avatar">{initials(user.full_name, user.email)}</span><span><span className="user-name">{user.full_name || "Unnamed user"}</span><span className="user-email">{user.email}</span></span></div></td>
             <td><span className={`role-pill ${user.role}`}>{roleName(user.role)}</span></td><td>{user.position || user.department ? [user.position, user.department].filter(Boolean).join(" · ") : <span className="muted">—</span>}</td>
             <td><span className={`status-pill ${user.is_active ? "active" : "disabled"}`}><span className="status-dot" />{user.is_active ? "Active" : "Disabled"}</span></td>
             <td>{dateText(user.created_at)}</td><td>{user.last_sign_in_at ? dateText(user.last_sign_in_at) : <span className="muted">Never</span>}</td>
-            <td><div className="action-menu"><button className="row-action" aria-label={`Edit ${user.email}`} title="Edit user" onClick={() => openEdit(user)}><Edit3 /></button><button className="row-action" aria-label={`Reset password for ${user.email}`} title="Reset password" onClick={() => { setPassword(""); setConfirmPassword(""); setDialogError(""); setDialog({ type: "password", user }); }}><KeyRound /></button><button className="row-action" aria-label={`Delete ${user.email}`} title="Delete account" disabled={user.id === currentUserId} onClick={() => { setDialogError(""); setDialog({ type: "delete", user }); }}><Trash2 /></button></div></td>
+            <td><div className="action-menu"><button className="row-action" aria-label={`Edit ${user.email}`} title="Edit user" disabled={previewMode} onClick={() => openEdit(user)}><Edit3 /></button><button className="row-action" aria-label={`Reset password for ${user.email}`} title="Reset password" disabled={previewMode} onClick={() => { setPassword(""); setConfirmPassword(""); setDialogError(""); setDialog({ type: "password", user }); }}><KeyRound /></button><button className="row-action" aria-label={`Delete ${user.email}`} title="Delete account" disabled={previewMode || user.id === currentUserId} onClick={() => { setDialogError(""); setDialog({ type: "delete", user }); }}><Trash2 /></button></div></td>
           </tr>)}
         </tbody></table></div><div className="table-footer"><span>Showing {visibleCount} account{visibleCount === 1 ? "" : "s"}</span><span>Sorted by creation date</span></div>
       </>}
