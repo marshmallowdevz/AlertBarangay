@@ -3,6 +3,9 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 const form = document.querySelector('#auth-form');
 const emailInput = document.querySelector('#email');
+const emailLabel = document.querySelector('#email-label');
+const fullNameInput = document.querySelector('#full-name');
+const fullNameField = document.querySelector('#full-name-field');
 const passwordInput = document.querySelector('#password');
 const confirmInput = document.querySelector('#confirm-password');
 const confirmField = document.querySelector('#confirm-field');
@@ -12,8 +15,37 @@ const modePrompt = document.querySelector('#mode-prompt-text');
 const intro = document.querySelector('#form-intro');
 const eyebrow = document.querySelector('#form-eyebrow');
 const message = document.querySelector('#form-message');
+const page = document.querySelector('#page');
+const landingSignUp = document.querySelector('#landing-sign-up');
+const landingSignIn = document.querySelector('#landing-sign-in');
+const authBack = document.querySelector('#auth-back');
+const formTitle = document.querySelector('#form-title');
 
 let mode = 'sign-in';
+
+landingSignUp.addEventListener('click', () => {
+  modeToggle.click();
+  page.classList.remove('is-landing');
+  page.classList.add('is-auth');
+  emailInput.focus();
+});
+
+landingSignIn.addEventListener('click', () => {
+  page.classList.remove('is-landing');
+  page.classList.add('is-auth');
+  page.dataset.authMode = 'sign-in';
+  emailLabel.textContent = 'Email';
+  modePrompt.textContent = 'Don’t have an account?';
+  modeToggle.textContent = 'Sign up';
+  emailInput.focus();
+});
+
+authBack.addEventListener('click', () => {
+  if (mode === 'sign-up') modeToggle.click();
+  page.classList.remove('is-auth');
+  delete page.dataset.authMode;
+  page.classList.add('is-landing');
+});
 
 function showMessage(text, kind = 'error') {
   message.textContent = text;
@@ -32,11 +64,17 @@ modeToggle.addEventListener('click', () => {
   const signingUp = mode === 'sign-up';
 
   confirmField.hidden = !signingUp;
+  fullNameField.hidden = !signingUp;
+  fullNameInput.required = signingUp;
   confirmInput.required = signingUp;
   passwordInput.autocomplete = signingUp ? 'new-password' : 'current-password';
-  submitButton.innerHTML = signingUp ? 'Create account <span aria-hidden="true">&rarr;</span>' : 'Sign in <span aria-hidden="true">&rarr;</span>';
-  modePrompt.textContent = signingUp ? 'Already have an account?' : 'New to Alert Barangay?';
-  modeToggle.textContent = signingUp ? 'Sign in' : 'Create an account';
+  page.classList.add('is-auth');
+  page.dataset.authMode = signingUp ? 'sign-up' : 'sign-in';
+  formTitle.textContent = signingUp ? 'Create Your Account' : 'Hello Welcome Back!';
+  emailLabel.textContent = signingUp ? 'Email address' : 'Email';
+  submitButton.innerHTML = signingUp ? 'Sign Up <span aria-hidden="true">&rarr;</span>' : 'Sign In <span aria-hidden="true">&rarr;</span>';
+  modePrompt.textContent = signingUp ? 'Already have an account?' : 'Don’t have an account?';
+  modeToggle.textContent = signingUp ? 'Sign in' : 'Sign up';
   intro.textContent = signingUp
     ? 'Create an account to request access to your barangay dashboard.'
     : 'Sign in to manage your barangay dashboard accounts.';
@@ -95,7 +133,7 @@ form.addEventListener('submit', async (event) => {
 
   try {
     const data = signingUp
-      ? await sendAuthRequest('signup', { email: emailInput.value.trim(), password: passwordInput.value })
+      ? await sendAuthRequest('signup', { email: emailInput.value.trim(), password: passwordInput.value, data: { full_name: fullNameInput.value.trim() } })
       : await sendAuthRequest('token?grant_type=password', { email: emailInput.value.trim(), password: passwordInput.value });
 
     if (signingUp && !data.access_token) {
@@ -114,7 +152,7 @@ form.addEventListener('submit', async (event) => {
   } finally {
     submitButton.disabled = false;
     submitButton.innerHTML = mode === 'sign-up'
-      ? 'Create account <span aria-hidden="true">&rarr;</span>'
-      : 'Sign in <span aria-hidden="true">&rarr;</span>';
+      ? 'Sign Up <span aria-hidden="true">&rarr;</span>'
+      : 'Sign In <span aria-hidden="true">&rarr;</span>';
   }
 });
