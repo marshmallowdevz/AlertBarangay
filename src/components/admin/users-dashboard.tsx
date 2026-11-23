@@ -1,0 +1,185 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { Bell, Building2, Check, CircleAlert, Edit3, KeyRound, Plus, Search, Shield, Trash2, UserRound, Users, X } from "lucide-react";
+import type { ManagedUser, UserDraft, UserRole } from "@/types/user";
+
+type Metrics = { total: number; admins: number; officials: number; residents: number; active: number; disabled: number };
+type DialogState = { type: "create" } | { type: "edit"; user: ManagedUser } | { type: "password"; user: ManagedUser } | { type: "delete"; user: ManagedUser } | null;
+const emptyMetrics: Metrics = { total: 0, admins: 0, officials: 0, residents: 0, active: 0, disabled: 0 };
+const emptyDraft: UserDraft = { email: "", password: "", full_name: "", role: "resident", position: "", department: "" };
+
+function initials(name: string, email: string) {
+  const source = name.trim() || email;
+  return source.split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "U";
+}
+
+function roleName(role: UserRole) { return role === "admin" ? "Admin" : role === "official" ? "Official" : "Resident"; }
+function dateText(value: string) {
+  return new Intl.DateTimeFormat("en-PH", { year: "numeric", month: "short", day: "numeric" }).format(new Date(value));
+}
+
+export function UsersDashboard({ currentUserId }: { currentUserId: string }) {
+  const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [metrics, setMetrics] = useState<Metrics>(emptyMetrics);
+  const [search, setSearch] = useState("");
+  const [role, setRole] = useState("all");
+  const [status, setStatus] = useState("all");
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [dialog, setDialog] = useState<DialogState>(null);
+  const [draft, setDraft] = useState<UserDraft>(emptyDraft);
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [activeStatus, setActiveStatus] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [dialogError, setDialogError] = useState("");
+  const [toast, setToast] = useState("");
+
+  const loadUsers = useCallback(async () => {
+    setLoading(true); setLoadError(""); setUsers([]);
+    const params = new URLSearchParams();
+    if (search.trim()) params.set("q", search.trim());
+    if (role !== "all") params.set("role", role);
+    if (status !== "all") params.set("status", status);
+    try {
+      const response = await fetch(`/api/admin/users?${params}`, { cache: "no-store" });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "Unable to load user accounts.");
+      setUsers(body.users); setMetrics(body.metrics);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "Unable to load user accounts.");
+    } finally { setLoading(false); }
+  }, [search, role, status]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => { void loadUsers(); }, 220);
+    return () => clearTimeout(timer);
+  }, [loadUsers]);
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(""), 3200);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  const visibleCount = users.length;
+  const dialogTitle = useMemo(() => {
+    if (!dialog) return "";
+    return dialog.type === "create" ? "Create account" : dialog.type === "edit" ? "Edit user" : dialog.type === "password" ? "Set new password" : "Delete account";
+  }, [dialog]);
+
+  function openCreate() { setDraft(emptyDraft); setDialogError(""); setDialog({ type: "create" }); }
+  function openEdit(user: ManagedUser) {
+    setDraft({ email: user.email, password: "", full_name: user.full_name, role: user.role, position: user.position ?? "", department: user.department ?? "" });
+    setDialogError(""); setDialog({ type: "edit", user });
+  }
+  function closeDialog() { if (!saving) { setDialog(null); setDialogError(""); setPassword(""); setConfirmPassword(""); } }
+
+  async function saveUser(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (!dialog || (dialog.type !== "create" && dialog.type !== "edit")) return;
+    setSaving(true); setDialogError("");
+    const creating = dialog.type === "create";
+    try {
+      const response = await fetch(creating ? "/api/admin/users" : `/api/admin/users/${dialog.user.id}`, {
+        method: creating ? "POST" : "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(creating ? draft : { ...draft, is_active: activeStatus }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "Unable to save this account.");
+      setDialog(null); setToast(creating ? "Account created successfully." : "User details updated.");
+      void loadUsers();
+    } catch (error) { setDialogError(error instanceof Error ? error.message : "Unable to save this account."); }
+    finally { setSaving(false); }
+  }
+
+  async function resetPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (dialog?.type !== "password") return;
+    setSaving(true); setDialogError("");
+    try {
+      const response = await fetch(`/api/admin/users/${dialog.user.id}/password`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password, confirmPassword }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "Unable to reset password.");
+      setDialog(null); setPassword(""); setConfirmPassword(""); setToast("Password updated successfully.");
+    } catch (error) { setDialogError(error instanceof Error ? error.message : "Unable to reset password."); }
+    finally { setSaving(false); }
+  }
+
+  async function deleteUser() {
+    if (dialog?.type !== "delete") return;
+    setSaving(true); setDialogError("");
+    try {
+      const response = await fetch(`/api/admin/users/${dialog.user.id}`, { method: "DELETE" });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "Unable to delete account.");
+      setDialog(null); setToast("Account deleted."); void loadUsers();
+    } catch (error) { setDialogError(error instanceof Error ? error.message : "Unable to delete account."); }
+    finally { setSaving(false); }
+  }
+
+  useEffect(() => { if (dialog?.type === "edit") setActiveStatus(dialog.user.is_active); }, [dialog]);
+
+  return <div className="page-wrap">
+    <div className="topline"><div className="breadcrumb"><span>Workspace</span><span className="crumb-dot">/</span><strong>User management</strong></div><div className="top-actions"><button className="icon-button" aria-label="Notifications"><Bell size={17} /><span className="notification-dot" /></button><span className="mini-avatar">AB</span></div></div>
+    <div className="page-heading"><div><div className="eyebrow">ADMINISTRATION</div><h1>User management</h1><p className="subtitle">Create accounts and manage access to the AlertBarangay dashboard.</p></div><button className="button primary" onClick={openCreate}><Plus size={16} strokeWidth={2.5} />Create account</button></div>
+    <div className="notice"><Shield size={18} /><div><strong>Account access is managed centrally</strong><p>New accounts can sign in to connected AlertBarangay dashboards using their assigned email and password.</p></div></div>
+    <section className="overview-card" aria-label="Account overview">
+      <div className="overview-top"><h2 className="section-title">Account overview</h2><span className="section-note">All registered accounts</span></div>
+      <div className="overview-total"><strong>{metrics.total.toLocaleString()}</strong><span>Total users created</span></div>
+      <div className="metrics-grid">
+        <Metric icon={<Shield />} label="Admins" value={metrics.admins} />
+        <Metric icon={<Building2 />} label="Officials" value={metrics.officials} />
+        <Metric icon={<UserRound />} label="Residents / users" value={metrics.residents} />
+        <Metric icon={<Check />} label="Active accounts" value={metrics.active} />
+        <Metric icon={<CircleAlert />} label="Disabled accounts" value={metrics.disabled} />
+      </div>
+    </section>
+    <section className="panel" aria-label="User accounts">
+      <div className="panel-header"><div className="panel-heading"><h2 className="section-title">All accounts</h2><p>Review account details, roles, and access status.</p></div>
+        <div className="filters"><div className="search-wrap"><Search size={15} /><input className="search-input" aria-label="Search users" placeholder="Search name or email…" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
+          <select className="filter-select" aria-label="Filter by role" value={role} onChange={(e) => setRole(e.target.value)}><option value="all">All roles</option><option value="admin">Admins</option><option value="official">Officials</option><option value="resident">Residents</option></select>
+          <select className="filter-select" aria-label="Filter by status" value={status} onChange={(e) => setStatus(e.target.value)}><option value="all">All status</option><option value="active">Active</option><option value="disabled">Disabled</option></select>
+        </div>
+      </div>
+      {loading ? <div className="loading-state" aria-label="Loading user accounts"><div className="skeleton" /><div className="skeleton" /><div className="skeleton" /></div> : loadError ? <div className="empty-state"><div className="empty-icon"><CircleAlert size={20} /></div><strong>Couldn't load accounts</strong><p>{loadError}</p><button className="button secondary" style={{ marginTop: 14 }} onClick={() => void loadUsers()}>Try again</button></div> : users.length === 0 ? <div className="empty-state"><div className="empty-icon"><Users size={20} /></div><strong>{search || role !== "all" || status !== "all" ? "No matching accounts" : "No accounts yet"}</strong><p>{search || role !== "all" || status !== "all" ? "Try changing your filters or search terms." : "Create an account to get started."}</p>{!search && role === "all" && status === "all" && <button className="button primary" style={{ marginTop: 14 }} onClick={openCreate}><Plus size={15} />Create account</button>}</div> : <>
+        <div className="table-scroll"><table className="user-table"><thead><tr><th>User</th><th>Role</th><th>Position / department</th><th>Status</th><th>Created</th><th>Last sign in</th><th aria-label="Actions" /></tr></thead><tbody>
+          {users.map((user) => <tr key={user.id}><td><div className="user-cell"><span className="user-avatar">{initials(user.full_name, user.email)}</span><span><span className="user-name">{user.full_name || "Unnamed user"}</span><span className="user-email">{user.email}</span></span></div></td>
+            <td><span className={`role-pill ${user.role}`}>{roleName(user.role)}</span></td><td>{user.position || user.department ? [user.position, user.department].filter(Boolean).join(" · ") : <span className="muted">—</span>}</td>
+            <td><span className={`status-pill ${user.is_active ? "active" : "disabled"}`}><span className="status-dot" />{user.is_active ? "Active" : "Disabled"}</span></td>
+            <td>{dateText(user.created_at)}</td><td>{user.last_sign_in_at ? dateText(user.last_sign_in_at) : <span className="muted">Never</span>}</td>
+            <td><div className="action-menu"><button className="row-action" aria-label={`Edit ${user.email}`} title="Edit user" onClick={() => openEdit(user)}><Edit3 /></button><button className="row-action" aria-label={`Reset password for ${user.email}`} title="Reset password" onClick={() => { setPassword(""); setConfirmPassword(""); setDialogError(""); setDialog({ type: "password", user }); }}><KeyRound /></button><button className="row-action" aria-label={`Delete ${user.email}`} title="Delete account" disabled={user.id === currentUserId} onClick={() => { setDialogError(""); setDialog({ type: "delete", user }); }}><Trash2 /></button></div></td>
+          </tr>)}
+        </tbody></table></div><div className="table-footer"><span>Showing {visibleCount} account{visibleCount === 1 ? "" : "s"}</span><span>Sorted by creation date</span></div>
+      </>}
+    </section>
+
+    {toast && <div className="toast" role="status">{toast}</div>}
+    {dialog && <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) closeDialog(); }}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+      <header className="modal-head"><div><h2 id="dialog-title">{dialogTitle}</h2><p>{dialog.type === "create" ? "Add a new person to the dashboard." : dialog.type === "edit" ? "Update this user's details and access." : dialog.type === "password" ? `Set a new sign-in password for ${dialog.user.email}.` : "This action permanently removes dashboard access."}</p></div><button className="close-button" aria-label="Close dialog" onClick={closeDialog}><X size={16} /></button></header>
+      {(dialog.type === "create" || dialog.type === "edit") && <form onSubmit={saveUser}>
+        <div className="modal-body"><div className="modal-subsection"><p className="modal-subsection-title">Account details</p><div className="form-grid">
+          <Field label="Full name" full><input required maxLength={120} value={draft.full_name} onChange={(e) => setDraft({ ...draft, full_name: e.target.value })} placeholder="e.g. Maria Santos" /></Field>
+          <Field label="Email address" full><input required type="email" disabled={dialog.type === "edit"} value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} placeholder="name@barangay.gov.ph" /></Field>
+          {dialog.type === "create" && <Field label="Temporary password" full><input required minLength={12} type="password" autoComplete="new-password" value={draft.password} onChange={(e) => setDraft({ ...draft, password: e.target.value })} placeholder="At least 12 characters" /><span className="field-hint">Share this temporary password securely with the new account holder.</span></Field>}
+        </div></div><div className="modal-subsection"><p className="modal-subsection-title">Role & organization</p><div className="form-grid">
+          <Field label="Role"><select value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value as UserRole })}><option value="resident">Resident</option><option value="official">Official</option><option value="admin">Admin</option></select></Field>
+          <Field label="Account status"><select value={dialog.type === "edit" ? String(activeStatus) : "true"} onChange={(e) => setActiveStatus(e.target.value === "true")} disabled={dialog.type === "create"}><option value="true">Active</option><option value="false">Disabled</option></select></Field>
+          <Field label="Position"><input maxLength={120} value={draft.position} onChange={(e) => setDraft({ ...draft, position: e.target.value })} placeholder="e.g. Barangay Captain" /></Field>
+          <Field label="Department"><input maxLength={120} value={draft.department} onChange={(e) => setDraft({ ...draft, department: e.target.value })} placeholder="e.g. Health & Safety" /></Field>
+        </div></div>{dialogError && <div className="inline-error" role="alert">{dialogError}</div>}</div>
+        <footer className="modal-foot"><button type="button" className="button secondary" onClick={closeDialog}>Cancel</button><button className="button primary" disabled={saving}>{saving ? "Saving…" : dialog.type === "create" ? "Create account" : "Save changes"}</button></footer>
+      </form>}
+      {dialog.type === "password" && <form onSubmit={resetPassword}><div className="modal-body"><Field label="New password" full><input type="password" autoFocus required minLength={12} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 12 characters" /></Field><Field label="Confirm new password" full><input type="password" required minLength={12} autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Re-enter the new password" /><span className="field-hint">Use at least 12 characters. The new password takes effect immediately.</span></Field>{dialogError && <div className="inline-error" role="alert" style={{ marginTop: 13 }}>{dialogError}</div>}</div><footer className="modal-foot"><button type="button" className="button secondary" onClick={closeDialog}>Cancel</button><button className="button primary" disabled={saving}>{saving ? "Updating…" : "Set password"}</button></footer></form>}
+      {dialog.type === "delete" && <><div className="modal-body"><p className="confirm-copy">You’re about to permanently delete <strong>{dialog.user.full_name || dialog.user.email}</strong> and remove their sign-in access. This cannot be undone.</p><div className="danger-note">This account will no longer be able to sign in to connected AlertBarangay dashboards.</div>{dialogError && <div className="inline-error" role="alert" style={{ marginTop: 13 }}>{dialogError}</div>}</div><footer className="modal-foot"><button className="button secondary" onClick={closeDialog}>Cancel</button><button className="button danger" disabled={saving} onClick={() => void deleteUser()}>{saving ? "Deleting…" : "Delete account"}</button></footer></>}
+    </section></div>}
+  </div>;
+}
+
+function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) {
+  return <div className="metric"><div className="metric-label">{icon}{label}</div><div className="metric-value">{value.toLocaleString()}</div></div>;
+}
+
+function Field({ label, full, children }: { label: string; full?: boolean; children: React.ReactNode }) {
+  return <label className={`field ${full ? "full" : ""}`}><span>{label}</span>{children}</label>;
+}
