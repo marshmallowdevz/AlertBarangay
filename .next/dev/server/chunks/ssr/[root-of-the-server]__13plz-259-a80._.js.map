@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 10, "column": 0}, "map": {"version":3,"sources":["file:///E:/DOWNLOADS/larp/AlertBarangay/src/app/login/page.tsx"],"sourcesContent":["import { redirect } from \"next/navigation\";\n\nexport default function LoginPage() {\n  redirect(\"/admin/users\");\n}\n"],"names":["LoginPage"],"mappings":";;;;AAAA;AAAA;;AAEe,SAASA;IACtB,IAAA,iMAAQ,EAAC;AACX"}}]
+}
