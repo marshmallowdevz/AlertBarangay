@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#3d141d" />
+  <meta name="description" content="Sign in or create an account for the Alert Barangay dashboard." />
+  <title>Sign in | Alert Barangay</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --wine: #3d141d;
+      --wine-soft: #51232a;
+      --paper: #f9f8f4;
+      --cream: #f0e5d3;
+      --ink: #26181a;
+      --muted: #817779;
+      --line: #e8e2df;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; min-width: 320px; min-height: 100vh; background: var(--paper); color: var(--ink); }
+    .page { display: grid; grid-template-columns: minmax(460px, 0.93fr) minmax(480px, 1.07fr); min-height: 100vh; }
+
+    .sign-in-panel {
+      display: flex;
+      flex-direction: column;
+      padding: clamp(28px, 4.2vw, 64px) clamp(32px, 6vw, 92px) 34px;
+      background: linear-gradient(145deg, #fff 0%, var(--paper) 100%);
+    }
+    .brand { display: inline-flex; align-items: center; gap: 13px; width: fit-content; color: inherit; text-decoration: none; }
+    .brand-mark { display: grid; place-items: center; width: 48px; height: 48px; flex: 0 0 48px; border-radius: 15px; background: var(--cream); color: var(--wine); }
+    .brand-mark svg { width: 25px; height: 25px; }
+    .brand-name { font-size: 12px; font-weight: 800; letter-spacing: .13em; line-height: 1.3; }
+    .brand-name span { display: block; margin-top: 3px; font-size: 9px; font-weight: 600; letter-spacing: .19em; opacity: .62; }
+
+    .form-wrap { width: min(100%, 392px); margin: auto; padding: 46px 0 52px; }
+    .eyebrow { margin: 0 0 14px; color: var(--wine-soft); font-size: 11px; font-weight: 750; letter-spacing: .16em; text-transform: uppercase; }
+    h1 { margin: 0; color: var(--ink); font-size: clamp(30px, 3vw, 38px); font-weight: 760; letter-spacing: -.045em; line-height: 1.12; }
+    .intro { margin: 14px 0 34px; color: var(--muted); font-size: 14px; line-height: 1.75; }
+    .field { display: grid; gap: 9px; margin-top: 21px; }
+    .field label { color: #403538; font-size: 12px; font-weight: 650; }
+    .field input { width: 100%; height: 51px; padding: 0 15px; border: 1px solid var(--line); border-radius: 10px; outline: none; background: rgba(255,255,255,.8); color: var(--ink); font: inherit; font-size: 14px; transition: border-color .18s, box-shadow .18s, background .18s; }
+    .field input::placeholder { color: #aaa1a2; }
+    .field input:focus { border-color: #8b6268; background: #fff; box-shadow: 0 0 0 4px rgba(61,20,29,.08); }
+    .submit { display: flex; align-items: center; justify-content: center; gap: 11px; width: 100%; height: 52px; margin-top: 28px; border: 0; border-radius: 10px; background: var(--wine); color: white; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; transition: background .18s, transform .18s; }
+    .submit:hover { background: #54202a; transform: translateY(-1px); }
+    .submit:focus-visible { outline: 3px solid #b99e92; outline-offset: 3px; }
+    .submit svg { width: 16px; height: 16px; }
+    .password-wrap { position: relative; }
+    .password-wrap input { padding-right: 51px; }
+    .password-toggle { position: absolute; top: 50%; right: 8px; display: grid; width: 36px; height: 36px; place-items: center; transform: translateY(-50%); border: 0; border-radius: 8px; background: transparent; color: #75686a; cursor: pointer; }
+    .password-toggle:hover { background: #f4efec; color: var(--wine); }
+    .password-toggle:focus-visible, .mode-toggle:focus-visible { outline: 3px solid #b99e92; outline-offset: 2px; }
+    .password-toggle svg { width: 18px; height: 18px; }
+    .password-toggle .eye-slash { display: block; }
+    .password-toggle[data-visible="true"] .eye-slash { display: none; }
+    .mode-prompt { margin: 23px 0 0; color: var(--muted); font-size: 12px; text-align: center; }
+    .mode-toggle { padding: 4px; border: 0; background: transparent; color: var(--wine); cursor: pointer; font: inherit; font-weight: 700; }
+    .form-message { display: none; margin: 17px 0 0; padding: 12px 14px; border: 1px solid #ead8d4; border-radius: 9px; background: #fff8f5; color: #71343b; font-size: 12px; line-height: 1.6; }
+    .form-message[data-kind="success"] { border-color: #d6e6d9; background: #f5fbf5; color: #285d39; }
+    .form-message[data-visible="true"] { display: block; }
+
+    .trust { display: flex; align-items: center; gap: 11px; width: fit-content; color: #746b6c; font-size: 11px; line-height: 1.5; }
+    .trust-icon { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 34px; border: 1px solid #e9e0db; border-radius: 50%; color: var(--wine-soft); }
+    .trust-icon svg { width: 16px; height: 16px; }
+
+    .hero-panel { position: relative; display: flex; min-height: 100vh; flex-direction: column; overflow: hidden; padding: clamp(28px, 4.2vw, 64px) clamp(32px, 6vw, 88px); background: var(--wine); color: white; isolation: isolate; }
+    .hero-panel::before, .hero-panel::after { position: absolute; z-index: -1; right: -220px; bottom: -290px; width: 680px; height: 680px; border: 1px solid rgba(240,229,211,.09); border-radius: 50%; content: ""; }
+    .hero-panel::after { right: -145px; bottom: -215px; width: 530px; height: 530px; border-color: rgba(240,229,211,.07); }
+    .hero-panel .brand { color: white; }
+    .hero-panel .brand-mark { background: rgba(240,229,211,.13); color: var(--cream); }
+    .hero-panel .brand-name span { opacity: .58; }
+    .hero-content { width: min(100%, 670px); margin: auto 0; padding: 66px 0 92px; }
+    .hero-title { margin: 0; color: #fff; font-size: clamp(54px, 7.2vw, 104px); font-weight: 820; letter-spacing: -.075em; line-height: .94; }
+    .hero-subtitle { max-width: 400px; margin: 27px 0 0; color: rgba(255,255,255,.72); font-size: clamp(14px, 1.25vw, 16px); line-height: 1.8; }
+    .hero-foot { color: rgba(255,255,255,.44); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+
+    @media (max-width: 900px) {
+      .page { grid-template-columns: minmax(370px, .95fr) minmax(360px, 1.05fr); }
+      .sign-in-panel { padding-right: 38px; padding-left: 38px; }
+      .hero-panel { padding-right: 38px; padding-left: 38px; }
+    }
+    @media (max-width: 720px) {
+      .page { grid-template-columns: 1fr; }
+      .sign-in-panel { min-height: 100svh; padding: 24px clamp(24px, 7vw, 52px) 26px; }
+      .form-wrap { margin: auto; padding: 58px 0; }
+      .hero-panel { min-height: 460px; padding: 26px clamp(24px, 7vw, 52px) 30px; }
+      .hero-content { padding: 72px 0; }
+      .hero-title { max-width: 560px; font-size: clamp(58px, 13vw, 92px); }
+      .hero-foot { position: relative; }
+    }
+    @media (max-width: 420px) {
+      .brand-mark { width: 43px; height: 43px; flex-basis: 43px; border-radius: 13px; }
+      .form-wrap { padding: 48px 0; }
+      .hero-panel { min-height: 400px; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="sign-in-panel" aria-labelledby="form-title">
+      <a class="brand" href="#" aria-label="Alert Barangay home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 27h20M8 24h16M10 22V10m6 12V10m6 12V10M7 9l9-5 9 5M5 10h22" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 27v-3h6v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </span>
+        <span class="brand-name">ALERTBARANGAY<span>LOCAL GOVERNMENT PORTAL</span></span>
+      </a>
+
+      <div class="form-wrap">
+        <p class="eyebrow" id="form-eyebrow">Administrator portal</p>
+        <h1 id="form-title">ALERT BARANGAY</h1>
+        <p class="intro" id="form-intro">Sign in to manage your barangay dashboard accounts.</p>
+        <form id="auth-form">
+          <div class="field">
+            <label for="email">Email address</label>
+            <input id="email" name="email" type="email" placeholder="you@barangay.gov.ph" autocomplete="email" required />
+          </div>
+          <div class="field">
+            <label for="password">Password</label>
+            <div class="password-wrap">
+              <input id="password" name="password" type="password" placeholder="Enter your password" autocomplete="current-password" minlength="8" required />
+              <button class="password-toggle" type="button" data-password-toggle="password" aria-label="Show password" aria-pressed="false">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="12" r="2.7" stroke="currentColor" stroke-width="1.7"/><path class="eye-slash" d="m3 3 18 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="field" id="confirm-field" hidden>
+            <label for="confirm-password">Confirm password</label>
+            <div class="password-wrap">
+              <input id="confirm-password" name="confirm-password" type="password" placeholder="Enter your password again" autocomplete="new-password" minlength="8" />
+              <button class="password-toggle" type="button" data-password-toggle="confirm-password" aria-label="Show password" aria-pressed="false">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="12" r="2.7" stroke="currentColor" stroke-width="1.7"/><path class="eye-slash" d="m3 3 18 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+          </div>
+          <button class="submit" type="submit" id="submit-button">Sign in <span aria-hidden="true">&rarr;</span></button>
+          <p class="form-message" id="form-message" role="status" aria-live="polite"></p>
+        </form>
+        <p class="mode-prompt"><span id="mode-prompt-text">New to Alert Barangay?</span> <button class="mode-toggle" id="mode-toggle" type="button">Create an account</button></p>
+      </div>
+
+    </section>
+
+    <aside class="hero-panel" aria-label="Alert Barangay">
+      <a class="brand" href="#" aria-label="Alert Barangay home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 27h20M8 24h16M10 22V10m6 12V10m6 12V10M7 9l9-5 9 5M5 10h22" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 27v-3h6v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </span>
+        <span class="brand-name">ALERTBARANGAY<span>LOCAL GOVERNMENT PORTAL</span></span>
+      </a>
+      <div class="hero-content">
+        <h2 class="hero-title">ALERT<br />BARANGAY</h2>
+        <p class="hero-subtitle">Manage trusted access to your local government dashboard.</p>
+      </div>
+      <div class="hero-foot">Secure access for local communities</div>
+    </aside>
+  </main>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
