@@ -5,6 +5,7 @@ import { Bell, Building2, Check, CircleAlert, Edit3, KeyRound, Plus, Search, Shi
 import type { ManagedUser, UserDraft, UserRole } from "@/types/user";
 
 type Metrics = { total: number; admins: number; officials: number; residents: number; active: number; disabled: number };
+type UserGroup = "all" | "residents" | "officials";
 type DialogState = { type: "create" } | { type: "edit"; user: ManagedUser } | { type: "password"; user: ManagedUser } | { type: "delete"; user: ManagedUser } | null;
 const emptyMetrics: Metrics = { total: 0, admins: 0, officials: 0, residents: 0, active: 0, disabled: 0 };
 const emptyDraft: UserDraft = { email: "", password: "", full_name: "", role: "resident", position: "", department: "" };
@@ -29,6 +30,7 @@ export function UsersDashboard({ currentUserId, previewMode = false }: { current
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [metrics, setMetrics] = useState<Metrics>(emptyMetrics);
   const [search, setSearch] = useState("");
+  const [group, setGroup] = useState<UserGroup>("all");
   const [role, setRole] = useState("all");
   const [status, setStatus] = useState("all");
   const [loading, setLoading] = useState(true);
@@ -38,6 +40,7 @@ export function UsersDashboard({ currentUserId, previewMode = false }: { current
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [activeStatus, setActiveStatus] = useState(true);
+  const [showTemporaryPassword, setShowTemporaryPassword] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dialogError, setDialogError] = useState("");
   const [toast, setToast] = useState("");
@@ -48,9 +51,10 @@ export function UsersDashboard({ currentUserId, previewMode = false }: { current
       const query = search.trim().toLocaleLowerCase();
       const filteredUsers = previewUsers.filter((user) => {
         const matchesQuery = !query || `${user.email} ${user.full_name}`.toLocaleLowerCase().includes(query);
+          const matchesGroup = group === "all" || (group === "residents" ? user.role === "resident" : user.role === "official" || user.role === "admin");
         const matchesRole = role === "all" || user.role === role;
         const matchesStatus = status === "all" || (status === "active" ? user.is_active : !user.is_active);
-        return matchesQuery && matchesRole && matchesStatus;
+          return matchesQuery && matchesGroup && matchesRole && matchesStatus;
       });
       setUsers(filteredUsers);
       setMetrics({
@@ -65,6 +69,7 @@ export function UsersDashboard({ currentUserId, previewMode = false }: { current
       return;
     }
     const params = new URLSearchParams();
+    if (group !== "all") params.set("group", group);
     if (search.trim()) params.set("q", search.trim());
     if (role !== "all") params.set("role", role);
     if (status !== "all") params.set("status", status);
@@ -76,7 +81,7 @@ export function UsersDashboard({ currentUserId, previewMode = false }: { current
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "Unable to load user accounts.");
     } finally { setLoading(false); }
-  }, [previewMode, search, role, status]);
+  }, [previewMode, search, group, role, status]);
 
   useEffect(() => {
     const timer = setTimeout(() => { void loadUsers(); }, 220);
@@ -94,7 +99,11 @@ export function UsersDashboard({ currentUserId, previewMode = false }: { current
     return dialog.type === "create" ? "Create account" : dialog.type === "edit" ? "Edit user" : dialog.type === "password" ? "Set new password" : "Delete account";
   }, [dialog]);
 
-  function openCreate() { setDraft(emptyDraft); setDialogError(""); setDialog({ type: "create" }); }
+  function openCreate() { setDraft(emptyDraft); setDialogError(""); setActiveStatus(true); setShowTemporaryPassword(false); setDialog({ type: "create" }); }
+  function selectGroup(nextGroup: UserGroup) {
+    setGroup(nextGroup);
+    setRole(nextGroup === "residents" ? "resident" : "all");
+  }
   function openEdit(user: ManagedUser) {
     setDraft({ email: user.email, password: "", full_name: user.full_name, role: user.role, position: user.position ?? "", department: user.department ?? "" });
     setDialogError(""); setDialog({ type: "edit", user });
@@ -105,15 +114,21 @@ export function UsersDashboard({ currentUserId, previewMode = false }: { current
     event.preventDefault(); if (!dialog || (dialog.type !== "create" && dialog.type !== "edit")) return;
     setSaving(true); setDialogError("");
     const creating = dialog.type === "create";
+    const profileDraft = {
+      ...draft,
+      position: draft.role === "official" ? draft.position.trim() || null : null,
+      department: draft.role === "official" ? draft.department.trim() || null : null,
+    };
     try {
       const response = await fetch(creating ? "/api/admin/users" : `/api/admin/users/${dialog.user.id}`, {
         method: creating ? "POST" : "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(creating ? draft : { ...draft, is_active: activeStatus }),
+        body: JSON.stringify(creating ? profileDraft : { ...profileDraft, is_active: activeStatus }),
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || "Unable to save this account.");
-      setDialog(null); setToast(creating ? "Account created successfully." : "User details updated.");
-      void loadUsers();
+      setDialog(null); setDraft(emptyDraft); setActiveStatus(true); setShowTemporaryPassword(false);
+      await loadUsers();
+      setToast(creating ? "Account created successfully." : "User details updated.");
     } catch (error) { setDialogError(error instanceof Error ? error.message : "Unable to save this account."); }
     finally { setSaving(false); }
   }
@@ -162,9 +177,20 @@ export function UsersDashboard({ currentUserId, previewMode = false }: { current
       </div>
     </section>
     <section className="panel" aria-label="User accounts">
-      <div className="panel-header"><div className="panel-heading"><h2 className="section-title">All accounts</h2><p>Review account details, roles, and access status.</p></div>
+      <div role="tablist" aria-label="Account group" style={{ display: "flex", gap: 8, padding: "16px 20px 0" }}>
+        <button type="button" role="tab" aria-selected={group === "all"} className={`button ${group === "all" ? "primary" : "secondary"}`} onClick={() => selectGroup("all")}>All accounts</button>
+        <button type="button" role="tab" aria-selected={group === "residents"} className={`button ${group === "residents" ? "primary" : "secondary"}`} onClick={() => selectGroup("residents")}>Residents</button>
+        <button type="button" role="tab" aria-selected={group === "officials"} className={`button ${group === "officials" ? "primary" : "secondary"}`} onClick={() => selectGroup("officials")}>Officials & admins</button>
+      </div>
+      <div className="panel-header"><div className="panel-heading"><h2 className="section-title">{group === "all" ? "All accounts" : group === "residents" ? "Residents" : "Officials and admins"}</h2><p>Review account details, roles, and access status.</p></div>
         <div className="filters"><div className="search-wrap"><Search size={15} /><input className="search-input" aria-label="Search users" placeholder="Search name or email…" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
-          <select className="filter-select" aria-label="Filter by role" value={role} onChange={(e) => setRole(e.target.value)}><option value="all">All roles</option><option value="admin">Admins</option><option value="official">Officials</option><option value="resident">Residents</option></select>
+          <select className="filter-select" aria-label="Filter by role" value={role} onChange={(e) => setRole(e.target.value)}>
+            {group === "all" && <option value="all">All roles</option>}
+            {group === "officials" && <option value="all">All official roles</option>}
+            {(group === "all" || group === "officials") && <option value="admin">Admins</option>}
+            {(group === "all" || group === "officials") && <option value="official">Officials</option>}
+            {(group === "all" || group === "residents") && <option value="resident">Residents</option>}
+          </select>
           <select className="filter-select" aria-label="Filter by status" value={status} onChange={(e) => setStatus(e.target.value)}><option value="all">All status</option><option value="active">Active</option><option value="disabled">Disabled</option></select>
         </div>
       </div>
@@ -186,13 +212,13 @@ export function UsersDashboard({ currentUserId, previewMode = false }: { current
       {(dialog.type === "create" || dialog.type === "edit") && <form onSubmit={saveUser}>
         <div className="modal-body"><div className="modal-subsection"><p className="modal-subsection-title">Account details</p><div className="form-grid">
           <Field label="Full name" full><input required maxLength={120} value={draft.full_name} onChange={(e) => setDraft({ ...draft, full_name: e.target.value })} placeholder="e.g. Maria Santos" /></Field>
-          <Field label="Email address" full><input required type="email" disabled={dialog.type === "edit"} value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} placeholder="name@barangay.gov.ph" /></Field>
-          {dialog.type === "create" && <Field label="Temporary password" full><input required minLength={12} type="password" autoComplete="new-password" value={draft.password} onChange={(e) => setDraft({ ...draft, password: e.target.value })} placeholder="At least 12 characters" /><span className="field-hint">Share this temporary password securely with the new account holder.</span></Field>}
+          <Field label="Email address" full><input required type="email" value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} placeholder="name@barangay.gov.ph" /></Field>
+          {dialog.type === "create" && <div className="field full"><label htmlFor="temporary-password">Temporary password</label><div className="password-input-wrap"><input id="temporary-password" required minLength={8} type={showTemporaryPassword ? "text" : "password"} autoComplete="new-password" value={draft.password} onChange={(e) => setDraft({ ...draft, password: e.target.value })} placeholder="At least 8 characters" /><button type="button" className="password-toggle" aria-label={showTemporaryPassword ? "Hide temporary password" : "Show temporary password"} aria-pressed={showTemporaryPassword} onClick={() => setShowTemporaryPassword((shown) => !shown)}><i className={`fa-solid ${showTemporaryPassword ? "fa-eye" : "fa-eye-slash"}`} aria-hidden="true" /></button></div><span className="field-hint">Share this temporary password securely with the new account holder.</span></div>}
         </div></div><div className="modal-subsection"><p className="modal-subsection-title">Role & organization</p><div className="form-grid">
-          <Field label="Role"><select value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value as UserRole })}><option value="resident">Resident</option><option value="official">Official</option><option value="admin">Admin</option></select></Field>
-          <Field label="Account status"><select value={dialog.type === "edit" ? String(activeStatus) : "true"} onChange={(e) => setActiveStatus(e.target.value === "true")} disabled={dialog.type === "create"}><option value="true">Active</option><option value="false">Disabled</option></select></Field>
-          <Field label="Position"><input maxLength={120} value={draft.position} onChange={(e) => setDraft({ ...draft, position: e.target.value })} placeholder="e.g. Barangay Captain" /></Field>
-          <Field label="Department"><input maxLength={120} value={draft.department} onChange={(e) => setDraft({ ...draft, department: e.target.value })} placeholder="e.g. Health & Safety" /></Field>
+          <Field label="Role"><select value={draft.role} onChange={(e) => { const nextRole = e.target.value as UserRole; setDraft({ ...draft, role: nextRole, position: nextRole === "official" ? draft.position : "", department: nextRole === "official" ? draft.department : "" }); }}><option value="resident">Resident</option><option value="official">Official</option><option value="admin">Admin</option></select></Field>
+          {dialog.type === "edit" && <Field label="Account status"><select value={String(activeStatus)} onChange={(e) => setActiveStatus(e.target.value === "true")}><option value="true">Active</option><option value="false">Disabled</option></select></Field>}
+          {draft.role === "official" && <><Field label="Position"><input maxLength={120} value={draft.position} onChange={(e) => setDraft({ ...draft, position: e.target.value })} placeholder="e.g. Barangay Captain" /></Field>
+          <Field label="Department"><input maxLength={120} value={draft.department} onChange={(e) => setDraft({ ...draft, department: e.target.value })} placeholder="e.g. Health & Safety" /></Field></>}
         </div></div>{dialogError && <div className="inline-error" role="alert">{dialogError}</div>}</div>
         <footer className="modal-foot"><button type="button" className="button secondary" onClick={closeDialog}>Cancel</button><button className="button primary" disabled={saving}>{saving ? "Saving…" : dialog.type === "create" ? "Create account" : "Save changes"}</button></footer>
       </form>}

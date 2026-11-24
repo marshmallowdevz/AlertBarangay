@@ -15,13 +15,13 @@ A standalone Next.js App Router module for administrators to create, edit, disab
 
    ```dotenv
    NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_OR_PUBLISHABLE_KEY
-   SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVICE_ROLE_OR_SECRET_KEY
+   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLISHABLE_KEY
+   SUPABASE_SECRET_KEY=YOUR_SUPABASE_SECRET_KEY
    ```
 
-   The service-role/secret key is only read by server-only modules and must never use a `NEXT_PUBLIC_` prefix. Do not commit `.env.local`.
+   `SUPABASE_SECRET_KEY` is preferred; `SUPABASE_SERVICE_ROLE_KEY` is supported as a fallback. The privileged key is read only by server-only modules and must never use a `NEXT_PUBLIC_` prefix. Do not commit `.env.local`.
 
-3. In the Supabase SQL Editor, run [`supabase/migrations/202611230001_admin_user_management.sql`](supabase/migrations/202611230001_admin_user_management.sql).
+3. In the Supabase SQL Editor, run [`supabase/migrations/202611230001_admin_user_management.sql`](supabase/migrations/202611230001_admin_user_management.sql), then [`supabase/migrations/202611250001_profiles_self_read_policy.sql`](supabase/migrations/202611250001_profiles_self_read_policy.sql).
 4. Create the first user under **Authentication → Users** in Supabase, or use the Auth Admin API. Then promote that user's UUID in the SQL Editor:
 
    ```sql
@@ -37,14 +37,14 @@ A standalone Next.js App Router module for administrators to create, edit, disab
 ## Account behavior
 
 - New accounts are email-confirmed and receive the temporary password entered by the administrator. Communicate it to the user using a secure channel; this dashboard does not email credentials.
-- Passwords must be at least 12 characters. Admin password resets require entering the password twice and are audited without storing the password.
+- New-account temporary passwords must be at least 8 characters. Admin password resets require matching passwords of at least 12 characters and are audited without storing the password.
 - Disabling an account marks its profile inactive and applies a long Auth ban. Re-enabling clears that ban. All connected dashboards must also check `profiles.is_active` and the profile role during authorization.
 - Deleting an account removes the Auth user and cascades deletion of the profile. Audit rows intentionally retain actor and target UUIDs without Auth foreign keys.
 - This app only exposes user management. Announcements/settings entries in the sidebar are visual placeholders for integration with the official dashboard.
 
 ## Security and RLS
 
-All `/api/admin/users` operations independently validate the cookie-backed Supabase session, then require an active `admin` profile before using the service-role client. The admin client is isolated in `src/lib/supabase/admin.ts`, marked `server-only`, and never passed to client components. Client bundles use only `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+All `/api/admin/users` operations independently validate the cookie-backed Supabase session, then require an active `admin` profile before using the service-role client. The admin client is isolated in `src/lib/supabase/admin.ts`, marked `server-only`, and never passed to client components. Client bundles use only `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
 
 RLS is enabled on `profiles` and `audit_logs`. Authenticated users can read their own profile and update only their own `full_name`; active administrators can read profiles and audit history. No browser role assignment or audit write policy is granted. The service-role API handlers perform account mutations and audit writes on the server.
 

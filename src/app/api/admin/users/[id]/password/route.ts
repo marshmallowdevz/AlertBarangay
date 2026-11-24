@@ -1,10 +1,10 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { jsonError } from "@/lib/http";
-import { requireAdmin } from "@/lib/supabase/guard";
+import { adminAccessResponse, requireAdmin } from "@/lib/supabase/guard";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const access = await requireAdmin();
-  if (!access.ok) return jsonError("Administrator access required.", access.status);
+  if (!access.ok) return adminAccessResponse(access);
   const { id } = await params;
   try {
     const body = await request.json();
