@@ -1,5 +1,9 @@
-import { redirect } from "next/navigation";
+import { AccountOverview } from "@/components/admin/account-overview";
+import { getAdminUserDirectory } from "@/lib/admin/user-directory";
 
-export default function AdminOverviewPage() {
-  redirect("/admin/users");
+export const dynamic = "force-dynamic";
+
+export default async function AdminOverviewPage() {
+  const { metrics } = await getAdminUserDirectory();
+  return <AccountOverview metrics={metrics} />;
 }

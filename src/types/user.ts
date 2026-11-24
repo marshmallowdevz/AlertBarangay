@@ -1,5 +1,14 @@
 export type UserRole = "admin" | "official" | "resident";
 
+export type AccountMetrics = {
+  total: number;
+  admins: number;
+  officials: number;
+  residents: number;
+  active: number;
+  disabled: number;
+};
+
 export type ManagedUser = {
   id: string;
   email: string;

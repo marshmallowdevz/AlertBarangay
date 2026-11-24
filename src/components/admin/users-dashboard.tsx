@@ -1,13 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { Bell, Building2, Check, CircleAlert, Edit3, KeyRound, Plus, Search, Shield, Trash2, UserRound, Users, X } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Bell, CircleAlert, Edit3, KeyRound, Plus, Search, Shield, Trash2, Users, X } from "lucide-react";
 import type { ManagedUser, UserDraft, UserRole } from "@/types/user";
 
-type Metrics = { total: number; admins: number; officials: number; residents: number; active: number; disabled: number };
 type UserGroup = "all" | "residents" | "officials";
+type InitialFilters = { role: string; status: string; group: UserGroup };
 type DialogState = { type: "create" } | { type: "edit"; user: ManagedUser } | { type: "password"; user: ManagedUser } | { type: "delete"; user: ManagedUser } | null;
-const emptyMetrics: Metrics = { total: 0, admins: 0, officials: 0, residents: 0, active: 0, disabled: 0 };
 const emptyDraft: UserDraft = { email: "", password: "", full_name: "", role: "resident", position: "", department: "" };
 const previewUsers: ManagedUser[] = [
   { id: "preview-admin", email: "alex.reyes@example.test", full_name: "Alex Reyes", role: "admin", position: "Barangay Captain", department: "Administration", is_active: true, created_at: "2026-01-15T08:00:00.000Z", last_sign_in_at: "2026-11-20T08:00:00.000Z" },
@@ -26,13 +26,14 @@ function dateText(value: string) {
   return new Intl.DateTimeFormat("en-PH", { year: "numeric", month: "short", day: "numeric" }).format(new Date(value));
 }
 
-export function UsersDashboard({ currentUserId, previewMode = false }: { currentUserId: string; previewMode?: boolean }) {
+export function UsersDashboard({ currentUserId, previewMode = false, initialFilters = { role: "all", status: "all", group: "all" } }: { currentUserId: string; previewMode?: boolean; initialFilters?: InitialFilters }) {
+  const router = useRouter();
+  const pathname = usePathname();
   const [users, setUsers] = useState<ManagedUser[]>([]);
-  const [metrics, setMetrics] = useState<Metrics>(emptyMetrics);
   const [search, setSearch] = useState("");
-  const [group, setGroup] = useState<UserGroup>("all");
-  const [role, setRole] = useState("all");
-  const [status, setStatus] = useState("all");
+  const [group, setGroup] = useState<UserGroup>(initialFilters.group);
+  const [role, setRole] = useState(initialFilters.role);
+  const [status, setStatus] = useState(initialFilters.status);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [dialog, setDialog] = useState<DialogState>(null);
@@ -44,6 +45,22 @@ export function UsersDashboard({ currentUserId, previewMode = false }: { current
   const [saving, setSaving] = useState(false);
   const [dialogError, setDialogError] = useState("");
   const [toast, setToast] = useState("");
+
+  useEffect(() => {
+    setGroup(initialFilters.group);
+    setRole(initialFilters.role);
+    setStatus(initialFilters.status);
+  }, [initialFilters.group, initialFilters.role, initialFilters.status]);
+
+  function syncFilters(next: InitialFilters) {
+    const params = new URLSearchParams(window.location.search);
+    for (const key of ["role", "status", "group"]) params.delete(key);
+    if (next.role !== "all") params.set("role", next.role);
+    if (next.status !== "all") params.set("status", next.status);
+    if (next.group !== "all") params.set("group", next.group);
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }
 
   const loadUsers = useCallback(async () => {
     setLoading(true); setLoadError(""); setUsers([]);
@@ -57,14 +74,6 @@ export function UsersDashboard({ currentUserId, previewMode = false }: { current
           return matchesQuery && matchesGroup && matchesRole && matchesStatus;
       });
       setUsers(filteredUsers);
-      setMetrics({
-        total: previewUsers.length,
-        admins: previewUsers.filter((user) => user.role === "admin").length,
-        officials: previewUsers.filter((user) => user.role === "official").length,
-        residents: previewUsers.filter((user) => user.role === "resident").length,
-        active: previewUsers.filter((user) => user.is_active).length,
-        disabled: previewUsers.filter((user) => !user.is_active).length,
-      });
       setLoading(false);
       return;
     }
@@ -77,7 +86,7 @@ export function UsersDashboard({ currentUserId, previewMode = false }: { current
       const response = await fetch(`/api/admin/users?${params}`, { cache: "no-store" });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || "Unable to load user accounts.");
-      setUsers(body.users); setMetrics(body.metrics);
+      setUsers(body.users);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "Unable to load user accounts.");
     } finally { setLoading(false); }
@@ -101,9 +110,20 @@ export function UsersDashboard({ currentUserId, previewMode = false }: { current
 
   function openCreate() { setDraft(emptyDraft); setDialogError(""); setActiveStatus(true); setShowTemporaryPassword(false); setDialog({ type: "create" }); }
   function selectGroup(nextGroup: UserGroup) {
+    const nextRole = nextGroup === "residents" ? "resident" : "all";
     setGroup(nextGroup);
-    setRole(nextGroup === "residents" ? "resident" : "all");
+    setRole(nextRole);
+    syncFilters({ group: nextGroup, role: nextRole, status });
   }
+  function clearFilters() {
+    setGroup("all"); setRole("all"); setStatus("all");
+    syncFilters({ group: "all", role: "all", status: "all" });
+  }
+
+  const activeFilterLabel = role !== "all"
+    ? `Showing: ${role === "admin" ? "Admins" : role === "official" ? "Officials" : "Residents / users"}`
+    : status !== "all" ? `Showing: ${status === "active" ? "Active accounts" : "Disabled accounts"}`
+      : group !== "all" ? `Showing: ${group === "residents" ? "Residents" : "Officials & admins"}` : "";
   function openEdit(user: ManagedUser) {
     setDraft({ email: user.email, password: "", full_name: user.full_name, role: user.role, position: user.position ?? "", department: user.department ?? "" });
     setDialogError(""); setDialog({ type: "edit", user });
@@ -165,33 +185,23 @@ export function UsersDashboard({ currentUserId, previewMode = false }: { current
     <div className="topline"><div className="breadcrumb"><span>Workspace</span><span className="crumb-dot">/</span><strong>User management</strong></div><div className="top-actions"><button className="icon-button" aria-label="Notifications"><Bell size={17} /><span className="notification-dot" /></button><span className="mini-avatar">AB</span></div></div>
     <div className="page-heading"><div><div className="eyebrow">ADMINISTRATION</div><h1>User management</h1><p className="subtitle">Create accounts and manage access to the AlertBarangay dashboard.</p></div><button className="button primary" onClick={openCreate} disabled={previewMode}><Plus size={16} strokeWidth={2.5} />Create account</button></div>
     <div className="notice"><Shield size={18} /><div><strong>{previewMode ? "Preview mode — sample data" : "Account access is managed centrally"}</strong><p>{previewMode ? "This page is showing local demo accounts. Account changes are disabled in preview mode." : "New accounts can sign in to connected AlertBarangay dashboards using their assigned email and password."}</p></div></div>
-    <section className="overview-card" aria-label="Account overview">
-      <div className="overview-top"><h2 className="section-title">Account overview</h2><span className="section-note">All registered accounts</span></div>
-      <div className="overview-total"><strong>{metrics.total.toLocaleString()}</strong><span>Total users created</span></div>
-      <div className="metrics-grid">
-        <Metric icon={<Shield />} label="Admins" value={metrics.admins} />
-        <Metric icon={<Building2 />} label="Officials" value={metrics.officials} />
-        <Metric icon={<UserRound />} label="Residents / users" value={metrics.residents} />
-        <Metric icon={<Check />} label="Active accounts" value={metrics.active} />
-        <Metric icon={<CircleAlert />} label="Disabled accounts" value={metrics.disabled} />
-      </div>
-    </section>
     <section className="panel" aria-label="User accounts">
       <div role="tablist" aria-label="Account group" style={{ display: "flex", gap: 8, padding: "16px 20px 0" }}>
         <button type="button" role="tab" aria-selected={group === "all"} className={`button ${group === "all" ? "primary" : "secondary"}`} onClick={() => selectGroup("all")}>All accounts</button>
         <button type="button" role="tab" aria-selected={group === "residents"} className={`button ${group === "residents" ? "primary" : "secondary"}`} onClick={() => selectGroup("residents")}>Residents</button>
         <button type="button" role="tab" aria-selected={group === "officials"} className={`button ${group === "officials" ? "primary" : "secondary"}`} onClick={() => selectGroup("officials")}>Officials & admins</button>
       </div>
+      {activeFilterLabel && <div className="active-filter-banner"><strong>{activeFilterLabel}</strong><button type="button" onClick={clearFilters}>Show all accounts</button></div>}
       <div className="panel-header"><div className="panel-heading"><h2 className="section-title">{group === "all" ? "All accounts" : group === "residents" ? "Residents" : "Officials and admins"}</h2><p>Review account details, roles, and access status.</p></div>
         <div className="filters"><div className="search-wrap"><Search size={15} /><input className="search-input" aria-label="Search users" placeholder="Search name or email…" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
-          <select className="filter-select" aria-label="Filter by role" value={role} onChange={(e) => setRole(e.target.value)}>
+          <select className="filter-select" aria-label="Filter by role" value={role} onChange={(e) => { setRole(e.target.value); syncFilters({ group, role: e.target.value, status }); }}>
             {group === "all" && <option value="all">All roles</option>}
             {group === "officials" && <option value="all">All official roles</option>}
             {(group === "all" || group === "officials") && <option value="admin">Admins</option>}
             {(group === "all" || group === "officials") && <option value="official">Officials</option>}
             {(group === "all" || group === "residents") && <option value="resident">Residents</option>}
           </select>
-          <select className="filter-select" aria-label="Filter by status" value={status} onChange={(e) => setStatus(e.target.value)}><option value="all">All status</option><option value="active">Active</option><option value="disabled">Disabled</option></select>
+          <select className="filter-select" aria-label="Filter by status" value={status} onChange={(e) => { setStatus(e.target.value); syncFilters({ group, role, status: e.target.value }); }}><option value="all">All status</option><option value="active">Active</option><option value="disabled">Disabled</option></select>
         </div>
       </div>
       {loading ? <div className="loading-state" aria-label="Loading user accounts"><div className="skeleton" /><div className="skeleton" /><div className="skeleton" /></div> : loadError ? <div className="empty-state"><div className="empty-icon"><CircleAlert size={20} /></div><strong>Couldn't load accounts</strong><p>{loadError}</p><button className="button secondary" style={{ marginTop: 14 }} onClick={() => void loadUsers()}>Try again</button></div> : users.length === 0 ? <div className="empty-state"><div className="empty-icon"><Users size={20} /></div><strong>{search || role !== "all" || status !== "all" ? "No matching accounts" : "No accounts yet"}</strong><p>{search || role !== "all" || status !== "all" ? "Try changing your filters or search terms." : "Create an account to get started."}</p>{!previewMode && !search && role === "all" && status === "all" && <button className="button primary" style={{ marginTop: 14 }} onClick={openCreate}><Plus size={15} />Create account</button>}</div> : <>
@@ -226,10 +236,6 @@ export function UsersDashboard({ currentUserId, previewMode = false }: { current
       {dialog.type === "delete" && <><div className="modal-body"><p className="confirm-copy">You’re about to permanently delete <strong>{dialog.user.full_name || dialog.user.email}</strong> and remove their sign-in access. This cannot be undone.</p><div className="danger-note">This account will no longer be able to sign in to connected AlertBarangay dashboards.</div>{dialogError && <div className="inline-error" role="alert" style={{ marginTop: 13 }}>{dialogError}</div>}</div><footer className="modal-foot"><button className="button secondary" onClick={closeDialog}>Cancel</button><button className="button danger" disabled={saving} onClick={() => void deleteUser()}>{saving ? "Deleting…" : "Delete account"}</button></footer></>}
     </section></div>}
   </div>;
-}
-
-function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) {
-  return <div className="metric"><div className="metric-label">{icon}{label}</div><div className="metric-value">{value.toLocaleString()}</div></div>;
 }
 
 function Field({ label, full, children }: { label: string; full?: boolean; children: React.ReactNode }) {

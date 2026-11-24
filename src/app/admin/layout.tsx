@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { AdminSidebar } from "@/components/admin/sidebar";
+import { AdminShell } from "@/components/admin/admin-shell";
 import { resolveAppRole } from "@/lib/auth/resolve-app-role";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -11,5 +11,5 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
   if (!resolution.ok) redirect("/login?notice=role");
   if (resolution.role !== "admin") redirect(resolution.destination);
 
-  return <div className="app-shell"><AdminSidebar email={user.email ?? ""} /><main className="main-content">{children}</main></div>;
+  return <AdminShell email={user.email ?? ""}>{children}</AdminShell>;
 }

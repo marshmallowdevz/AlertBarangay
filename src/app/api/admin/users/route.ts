@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getAdminUserDirectory } from "@/lib/admin/user-directory";
 import { jsonError } from "@/lib/http";
 import { adminAccessResponse, requireAdmin } from "@/lib/supabase/guard";
 import type { ManagedUser, UserRole } from "@/types/user";
@@ -10,34 +11,8 @@ export async function GET(request: Request) {
   if (!access.ok) return adminAccessResponse(access);
 
   try {
-    const admin = createSupabaseAdminClient();
-    const allUsers = [];
-    for (let page = 1; ; page += 1) {
-      const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
-      if (error) throw error;
-      allUsers.push(...data.users);
-      if (data.users.length < 1000) break;
-    }
-    const { data: profiles, error: profileError } = await admin
-      .from("profiles")
-      .select("id, full_name, role, position, department, is_active, created_at");
-    if (profileError) throw profileError;
-
-    const profileById = new Map((profiles ?? []).map((profile) => [profile.id, profile]));
-    let users: ManagedUser[] = allUsers.map((user) => {
-      const profile = profileById.get(user.id);
-      return {
-        id: user.id,
-        email: user.email ?? "",
-        full_name: profile?.full_name || user.user_metadata?.full_name || "",
-        role: (profile?.role ?? "resident") as UserRole,
-        position: profile?.position ?? null,
-        department: profile?.department ?? null,
-        is_active: profile?.is_active ?? false,
-        created_at: profile?.created_at ?? user.created_at,
-        last_sign_in_at: user.last_sign_in_at ?? null,
-      };
-    });
+    const { users: directoryUsers, metrics } = await getAdminUserDirectory();
+    let users: ManagedUser[] = directoryUsers;
 
     const params = new URL(request.url).searchParams;
     const query = params.get("q")?.trim().toLocaleLowerCase();
@@ -51,17 +26,7 @@ export async function GET(request: Request) {
     if (status === "active") users = users.filter((user) => user.is_active);
     if (status === "disabled") users = users.filter((user) => !user.is_active);
 
-    return Response.json({
-      users,
-      metrics: {
-        total: allUsers.length,
-        admins: allUsers.filter((user) => profileById.get(user.id)?.role === "admin").length,
-        officials: allUsers.filter((user) => profileById.get(user.id)?.role === "official").length,
-        residents: allUsers.filter((user) => !["admin", "official"].includes(profileById.get(user.id)?.role ?? "resident")).length,
-        active: allUsers.filter((user) => profileById.get(user.id)?.is_active === true).length,
-        disabled: allUsers.filter((user) => profileById.get(user.id)?.is_active !== true).length,
-      },
-    }, { headers: { "Cache-Control": "no-store" } });
+    return Response.json({ users, metrics }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("Admin user listing failed", error);
     return jsonError("Unable to load user accounts.", 500);
