@@ -11,7 +11,7 @@ The sites keep separate entrypoints and access flows. Supabase Row Level Securit
 
 1. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`.
 2. From the repository root, run `npm install` and `npm run dev`.
-3. Set `VITE_REQUIRE_AUTH=true` in the officials site’s deployment to require official sign-in. Official accounts need the trusted `app_metadata` claim `{"barangay_role":"official"}`.
+3. The officials site requires sign-in by default. Official accounts need the trusted `app_metadata` claim `{"barangay_role":"official"}`. Keep `VITE_REQUIRE_AUTH=true` in production deployments; set it to `false` only for a local demo.
 
 ## Run the residents’ app
 
@@ -28,7 +28,7 @@ For Android, use the project inside `resident-app/`: build the resident app, the
 
 ## Shared Supabase setup
 
-The incidents table, RLS policies, private `incident-media` bucket, Realtime setup, cleanup function, and migration files are shared by both sites. Review all pending migrations in the shared project before applying them; a database migration changes the data service used by both sites.
+The incidents table, incident dispatches, notifications and resident read receipts, private `incident-media` and `community-media` buckets, Realtime setup, cleanup function, and migration files are shared by both sites. The officials dashboard reads and dispatches resident incidents; residents receive status updates. Review all pending migrations in the shared project before applying them; a database migration changes the data service used by both sites.
 
 The cleanup function is configured at `supabase/functions/cleanup-resolved-incident-media`. Its scheduled job runs at 03:00 Singapore time. Set `INCIDENT_CLEANUP_SECRET` as a Supabase Edge Function secret and store the matching value in Vault as `incident_cleanup_secret`; store the publishable key in Vault as `incident_cleanup_publishable_key`. Keep all secret values out of frontend files and source control.
 

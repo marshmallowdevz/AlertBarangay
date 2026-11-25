@@ -16,6 +16,7 @@ dist-ssr
 **/.gradle/
 **/build/
 supabase/.temp/
+oracleJdk-*/
 .env
 .env.*
 !.env.example

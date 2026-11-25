@@ -9,7 +9,7 @@ import DispatchView from './DispatchView';
 import AnnouncementsView from './AnnouncementsView';
 import { archiveAnnouncement, createAnnouncement, deleteAnnouncement, listAnnouncements, subscribeToAnnouncements, updateAnnouncement } from './announcementService';
 import Icon from './Icon';
-import { dispatchReport, listReports } from './reportService';
+import { dispatchIncident, dispatchReport, listReports, resolveIncident as resolveIncidentReport, subscribeToIncidents } from './reportService';
 import {
   getOrInitializeDashboardContacts,
   getOrInitializeDashboardProfile,
@@ -81,7 +81,7 @@ function mergeAnnouncements(current, incoming) {
   return [...unique.values()].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 }
 
-function Official({ user, onSignOut }) {
+function Official({ user, staffRole = '', onSignOut }) {
   const [activeNav, setActiveNav] = useState('overview');
   const [operationalData, setOperationalData] = useState({
     reports: [],
@@ -244,7 +244,7 @@ function Official({ user, onSignOut }) {
     let active = true;
     if (!isConfigured) return () => { active = false; };
 
-    listReports()
+    const refreshReports = () => listReports()
       .then((rows) => { if (active) setOperationalData((current) => ({ ...current, reports: rows })); })
       .catch((error) => {
         console.error('Unable to load shared reports.', error);
@@ -252,7 +252,12 @@ function Official({ user, onSignOut }) {
       })
       .finally(() => { if (active) setReportsLoading(false); });
 
-    return () => { active = false; };
+    const unsubscribe = subscribeToIncidents(() => { refreshReports(); }, (error) => {
+      if (active) setReportsError(error.message);
+    });
+    refreshReports();
+
+    return () => { active = false; unsubscribe(); };
   }, [reportsRetry]);
 
   useEffect(() => {
@@ -266,7 +271,7 @@ function Official({ user, onSignOut }) {
       (notification) => {
         if (!active) return;
         mergeNotifications([notification]);
-        if (['report_created', 'report_dispatched'].includes(notification.type)) {
+        if (['report_created', 'report_dispatched', 'incident_created', 'incident_status_changed'].includes(notification.type)) {
           listReports()
             .then((rows) => { if (active) setOperationalData((current) => ({ ...current, reports: rows })); })
             .catch((error) => console.error('Unable to refresh reports after a live notification.', error));
@@ -456,7 +461,8 @@ function Official({ user, onSignOut }) {
     setAnnouncementModalOpen(true);
   };
 
-  const canManageAnnouncements = user?.app_metadata?.barangay_role === 'official';
+  const canManageAnnouncements = ['official', 'admin'].includes(staffRole)
+    || ['official', 'admin'].includes(String(user?.app_metadata?.barangay_role || user?.app_metadata?.role || '').toLowerCase());
 
   const navigateTo = (view) => setActiveNav(view);
 
@@ -473,7 +479,17 @@ function Official({ user, onSignOut }) {
   const dispatchResponse = async ({ reportId, responseType, note }) => {
     const report = operationalData.reports.find((item) => item.id === reportId);
     if (!report) throw new Error('That incident could not be found. Refresh the dashboard and try again.');
-    await dispatchReport({ reportId: report.databaseId, responseType, note });
+    if (report.source === 'incident') {
+      await dispatchIncident({ incidentId: report.databaseId, responseType, note });
+    } else {
+      await dispatchReport({ reportId: report.databaseId, responseType, note });
+    }
+    const rows = await listReports();
+    setOperationalData((current) => ({ ...current, reports: rows }));
+  };
+
+  const resolveIncident = async (incidentId) => {
+    await resolveIncidentReport({ incidentId });
     const rows = await listReports();
     setOperationalData((current) => ({ ...current, reports: rows }));
   };
@@ -669,6 +685,7 @@ function Official({ user, onSignOut }) {
               loading={reportsLoading}
               error={reportsError}
               onRetry={() => { setReportsLoading(true); setReportsError(''); setReportsRetry((value) => value + 1); }}
+              onResolve={resolveIncident}
             />
           )}
           {activeNav === 'dispatch' && (

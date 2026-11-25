@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Check, Copy, LocateFixed, MapPin, Plus, Radio, X } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import { createVideoThumbnail, getVideoDuration, INCIDENT_MEDIA_LIMITS, prepareIncidentImage } from "./incidentMedia";
+import MediaSourceChooser from "./MediaSourceChooser";
 import "./ReelsMapView.css";
 
 const INCIDENT_TYPES = [
@@ -156,6 +157,38 @@ function uniquePath(userId) {
   return `${userId}/${id}`;
 }
 
+function incidentSubmitErrorMessage(error, stage) {
+  const message = String(error?.message || "").toLowerCase();
+  const status = String(error?.statusCode || error?.status || "");
+
+  if (error?.code === "23514" || message.includes("incidents_type_check")) {
+    return "This emergency type is not enabled in the database yet. Refresh the app and try again.";
+  }
+  if (status === "413" || message.includes("payload too large") || message.includes("entity too large")) {
+    return "The media file is larger than the storage limit. Choose a video under 15 MB or a smaller photo.";
+  }
+  if (error?.code === "42501" || message.includes("row-level security")) {
+    return stage === "saving the emergency report"
+      ? "The database denied this report. Check the incident reporting permissions and try again."
+      : "Storage denied this media upload. Check the incident-media bucket permissions and try again.";
+  }
+  if (["502", "503", "504"].includes(status) || message.includes("timeout") || message.includes("timed out")) {
+    return `Supabase timed out while ${stage}. Wait a moment, then try again.`;
+  }
+  if (message.includes("failed to fetch") || message.includes("network") || message.includes("load failed")) {
+    return "The connection dropped while submitting. Reconnect and try again.";
+  }
+  const detail = String(error?.message || error?.error_description || error?.name || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 180);
+  const code = error?.code ? ` [${error.code}]` : "";
+  const httpStatus = status ? ` (HTTP ${status})` : "";
+  return detail
+    ? `Could not finish ${stage}${code}${httpStatus}: ${detail}`
+    : `Could not finish ${stage}. Supabase returned no error details; check the browser console.`;
+}
+
 export default function ReelsMapView({
   userId,
   onClose,
@@ -179,11 +212,12 @@ export default function ReelsMapView({
   const [queryError, setQueryError] = useState("");
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [reportOpen, setReportOpen] = useState(initialReportOpen);
+  const [locationPicking, setLocationPicking] = useState(false);
   const [reportType, setReportType] = useState(initialReportType);
   const [description, setDescription] = useState("");
   const [coordinates, setCoordinates] = useState(null);
   const [locationMessage, setLocationMessage] = useState("Getting your location…");
-  const [mediaFile, setMediaFile] = useState(null);
+  const [mediaFiles, setMediaFiles] = useState([]);
   const [mediaBusy, setMediaBusy] = useState(false);
   const [reportError, setReportError] = useState("");
   const [reportBusy, setReportBusy] = useState(false);
@@ -374,6 +408,7 @@ export default function ReelsMapView({
       setCoordinates({ lat: event.latlng.lat, lng: event.latlng.lng });
       setLocationMessage("Pin location set. Drag the pin to adjust it.");
       setReportError("");
+      setLocationPicking(false);
     };
     map.on("click", onMapClick);
     return () => map.off("click", onMapClick);
@@ -430,7 +465,8 @@ export default function ReelsMapView({
     setCoordinates(null);
     setDescription("");
     setReportType(selectedType);
-    setMediaFile(null);
+    setMediaFiles([]);
+    setLocationPicking(false);
     setReportError("");
     setLocationMessage("Getting your location…");
     setReportOpen(true);
@@ -450,53 +486,60 @@ export default function ReelsMapView({
     return () => { current = false; };
   }, [reportOpen]);
 
-  const handleFile = async (event) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    setMediaFile(null);
+  const handleFiles = async (files) => {
+    const pickedFiles = Array.from(files || []);
+    if (!pickedFiles.length) return;
     setReportError("");
-    if (!file) return;
 
-    if (file.type.startsWith("image/")) {
-      if (file.size > 50 * 1024 * 1024) {
-        setReportError("The selected photo is over 50 MB. Choose a smaller image.");
-        return;
-      }
-      setMediaBusy(true);
-      try {
-        const prepared = await prepareIncidentImage(file);
-        setMediaFile({ kind: "image", ...prepared, name: "Compressed image" });
-      } catch (error) {
-        setReportError(error.message || "Could not prepare that image.");
-      } finally {
-        setMediaBusy(false);
-      }
+    const supportedVideos = ["video/mp4", "video/quicktime", "video/webm", "video/3gpp"];
+    const imageFiles = pickedFiles.filter((file) => file.type.startsWith("image/"));
+    const videoFiles = pickedFiles.filter((file) => supportedVideos.includes(file.type));
+    if (imageFiles.length + videoFiles.length !== pickedFiles.length) {
+      setReportError("Choose JPEG, PNG, or WebP photos, or an MP4, MOV, WebM, or 3GP video.");
+      return;
+    }
+    if (videoFiles.length && (videoFiles.length !== 1 || pickedFiles.length !== 1 || mediaFiles.length)) {
+      setReportError("Attach up to five photos or one short video to a report.");
+      return;
+    }
+    if (imageFiles.length && mediaFiles.some((file) => file.kind === "video")) {
+      setReportError("A report can include up to five photos or one short video.");
+      return;
+    }
+    if (mediaFiles.length + pickedFiles.length > 5) {
+      setReportError("A report can include up to five photos.");
       return;
     }
 
-    if (!file.type.startsWith("video/")) {
-      setReportError("Choose a supported image or video file.");
-      return;
-    }
-    if (file.size > INCIDENT_MEDIA_LIMITS.videoBytes) {
-      setReportError("Videos must be 15 MB or smaller.");
-      return;
-    }
-    const supportedVideoTypes = ["video/mp4", "video/quicktime", "video/webm", "video/3gpp"];
-    if (!supportedVideoTypes.includes(file.type)) {
-      setReportError("Use an MP4, MOV, WebM, or 3GP video.");
-      return;
-    }
+    setMediaBusy(true);
     try {
-      const duration = await getVideoDuration(file);
-      if (duration > INCIDENT_MEDIA_LIMITS.videoSeconds) {
-        setReportError("Videos must be 15 seconds or shorter.");
+      if (videoFiles.length) {
+        const file = videoFiles[0];
+        if (file.size > INCIDENT_MEDIA_LIMITS.videoBytes) {
+          throw new Error("Videos must be 15 MB or smaller.");
+        }
+        const duration = await getVideoDuration(file);
+        if (duration > INCIDENT_MEDIA_LIMITS.videoSeconds) {
+          throw new Error("Videos must be 15 seconds or shorter.");
+        }
+        const thumbnail = await createVideoThumbnail(file);
+        setMediaFiles([{ kind: "video", file, thumbnail, name: file.name }]);
         return;
       }
-      const thumbnail = await createVideoThumbnail(file);
-      setMediaFile({ kind: "video", file, thumbnail, name: file.name });
+
+      const preparedFiles = [];
+      for (const file of imageFiles) {
+        if (file.size > 50 * 1024 * 1024) {
+          throw new Error(`${file.name} is over 50 MB. Choose a smaller photo.`);
+        }
+        const prepared = await prepareIncidentImage(file);
+        preparedFiles.push({ kind: "image", ...prepared, name: file.name });
+      }
+      setMediaFiles((current) => [...current, ...preparedFiles]);
     } catch (error) {
-      setReportError(error.message);
+      setReportError(error.message || "Could not prepare the selected media.");
+    } finally {
+      setMediaBusy(false);
     }
   };
 
@@ -522,14 +565,15 @@ export default function ReelsMapView({
 
     setReportBusy(true);
     const uploadedPaths = [];
-    let mediaPath = null;
-    let mediaType = null;
+    const mediaPaths = [];
+    const mediaTypes = [];
+    let stage = "preparing the emergency report";
     try {
-      if (mediaFile) {
-        mediaPath = uniquePath(userId);
-        mediaType = mediaFile.kind;
+      for (const mediaFile of mediaFiles) {
+        const mediaPath = uniquePath(userId);
         const mainFile = mediaFile.kind === "image" ? mediaFile.main : mediaFile.file;
         const mainType = mediaFile.kind === "image" ? mediaFile.main.type : mediaFile.file.type;
+        stage = mediaFile.kind === "video" ? "uploading the video" : "uploading a photo";
         const { error: uploadError } = await supabase.storage.from(MEDIA_BUCKET).upload(mediaPath, mainFile, {
           contentType: mainType,
           upsert: false,
@@ -538,42 +582,53 @@ export default function ReelsMapView({
         uploadedPaths.push(mediaPath);
 
         const thumbnailPath = `${mediaPath}.thumb`;
+        stage = "uploading the media preview";
         const { error: thumbnailError } = await supabase.storage.from(MEDIA_BUCKET).upload(thumbnailPath, mediaFile.thumbnail, {
           contentType: mediaFile.thumbnail.type,
           upsert: false,
         });
         if (thumbnailError) throw thumbnailError;
         uploadedPaths.push(thumbnailPath);
+        mediaPaths.push(mediaPath);
+        mediaTypes.push(mediaFile.kind);
       }
 
+      stage = "preparing the emergency report data";
+      const incidentJson = JSON.stringify({
+        type: String(reportType),
+        description: String(description).trim(),
+        lat: Number(coordinates.lat),
+        lng: Number(coordinates.lng),
+        reporter_id: String(userId),
+        media_path: mediaPaths[0] || null,
+        media_type: mediaTypes[0] || null,
+        media_paths: mediaPaths,
+        media_types: mediaTypes,
+      });
+      const incidentPayload = JSON.parse(incidentJson);
+      if (!Number.isFinite(incidentPayload.lat) || !Number.isFinite(incidentPayload.lng)) {
+        throw new Error("The report pin has invalid coordinates. Tap the map or use GPS again.");
+      }
+
+      stage = "saving the emergency report";
       const { data, error } = await supabase
         .from("incidents")
-        .insert({
-          type: reportType,
-          description: description.trim(),
-          lat: coordinates.lat,
-          lng: coordinates.lng,
-          reporter_id: userId,
-          media_path: mediaPath,
-          media_type: mediaType,
-        })
+        .insert(incidentPayload)
         .select("eid")
         .single();
       if (error) throw error;
 
       setSubmittedEid(data.eid);
-      setMediaFile(null);
+      setMediaFiles([]);
       reloadRef.current?.();
       await onReportSubmitted?.(data.eid);
     } catch (error) {
       if (uploadedPaths.length) {
-        await supabase.storage.from(MEDIA_BUCKET).remove(uploadedPaths);
+        const { error: cleanupError } = await supabase.storage.from(MEDIA_BUCKET).remove(uploadedPaths);
+        if (cleanupError) console.warn("Could not remove incident media after submission failed.", cleanupError);
       }
-      setReportError(error.message?.includes("incident-media")
-        ? "Media upload was rejected. Check the bucket policy and file size."
-        : error.message?.includes("incidents")
-          ? "Could not save this incident. Apply the Supabase migration and check your access."
-          : "Could not submit the emergency report. Check your connection and try again.");
+      console.error("Emergency report submission failed.", { stage, error });
+      setReportError(incidentSubmitErrorMessage(error, stage));
     } finally {
       setReportBusy(false);
     }
@@ -629,17 +684,18 @@ export default function ReelsMapView({
       )}
 
       {queryError && <div className="reels-map-message" role="status">{queryError}</div>}
-      {!reportOpen && !submittedEid && (
-        <button type="button" className="reels-map-report" onClick={openReport}>
-          <Plus size={19} /> Report Emergency
-        </button>
+      {reportOpen && locationPicking && (
+        <div className="incident-location-picker-banner" role="status">
+          <p><MapPin size={17} /> Tap the map to place the emergency pin. Your report draft will stay open.</p>
+          <button type="button" onClick={() => setLocationPicking(false)}>Back to report</button>
+        </div>
       )}
 
-      {reportOpen && (
+      {reportOpen && !locationPicking && (
         <form className="incident-report-panel" onSubmit={submitIncident}>
           <div className="incident-report-heading">
             <div><small>COMMUNITY RESPONSE</small><h2>Report Emergency</h2></div>
-            <button type="button" className="incident-panel-close" onClick={() => setReportOpen(false)} aria-label="Close report form"><X size={19} /></button>
+            <button type="button" className="incident-panel-close" onClick={() => { setLocationPicking(false); setReportOpen(false); }} aria-label="Close report form"><X size={19} /></button>
           </div>
 
           <label className="incident-field">Emergency type
@@ -655,17 +711,42 @@ export default function ReelsMapView({
           </label>
 
           <div className="incident-location-field">
-            <div className="incident-location-heading"><strong>Location</strong><button type="button" className="incident-use-location" onClick={requestLocation}><LocateFixed size={14} /> Use GPS</button></div>
+            <div className="incident-location-heading">
+              <strong>Location</strong>
+              <div className="incident-location-actions">
+                <button type="button" className="incident-use-location" onClick={requestLocation}><LocateFixed size={14} /> Use GPS</button>
+                <button type="button" className="incident-use-location" onClick={() => { setReportError(""); setLocationPicking(true); }}><MapPin size={14} /> Pin on map</button>
+              </div>
+            </div>
             {coordinates
               ? <p>{coordinates.lat.toFixed(6)}, {coordinates.lng.toFixed(6)}</p>
               : <p className="incident-location-message">{locationMessage}</p>}
-            <small>Tap the map or drag the pin to adjust.</small>
+            <small>Use GPS, pin a point on the map, or drag the pin to adjust.</small>
           </div>
 
-          <label className="incident-field">Photo or short video (optional)
-            <input type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm,video/3gpp" onChange={handleFile} disabled={mediaBusy || reportBusy} />
-            <small>{mediaBusy ? "Compressing image…" : mediaFile ? `${mediaFile.name} ready` : "Images are compressed to WebP. Videos: up to 15 seconds and 15 MB."}</small>
-          </label>
+          <div className="incident-field">
+            <span>Photos or one short video (optional)</span>
+            <MediaSourceChooser
+              buttonLabel={mediaFiles.length ? "Add more media" : "Choose gallery or camera"}
+              galleryAccept="image/*,video/mp4,video/quicktime,video/webm,video/3gpp"
+              multiple
+              disabled={mediaBusy || reportBusy || mediaFiles.length >= 5}
+              onFiles={handleFiles}
+            />
+            <small>{mediaBusy ? "Preparing selected media…" : mediaFiles.length ? `${mediaFiles.length} ${mediaFiles.some((file) => file.kind === "video") ? "video" : "photos"} ready` : "Add up to 5 photos, or one video up to 15 seconds and 15 MB."}</small>
+            {mediaFiles.length > 0 && (
+              <ul className="incident-media-list" aria-label="Selected report media">
+                {mediaFiles.map((file, index) => (
+                  <li key={`${file.name}-${index}`}>
+                    <span>{file.name}</span>
+                    <button type="button" onClick={() => setMediaFiles((current) => current.filter((_, itemIndex) => itemIndex !== index))} disabled={mediaBusy || reportBusy} aria-label={`Remove ${file.name}`}>
+                      <X size={14} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
           {!isOnline && <p className="incident-form-error">You are offline. Reconnect before sending this report.</p>}
           {reportError && <p className="incident-form-error" role="alert">{reportError}</p>}
@@ -689,8 +770,15 @@ export default function ReelsMapView({
         </section>
       )}
 
-      <div className="reels-map-legend" aria-label="Incident marker types">
-        {INCIDENT_TYPES.map((type) => <span key={type.key}><i style={{ backgroundColor: type.color }} />{type.label}</span>)}
+      <div className={`reels-map-bottom-bar ${locationPicking ? "location-picking" : ""}`}>
+        <div className="reels-map-legend" aria-label="Incident marker types">
+          {INCIDENT_TYPES.map((type) => <span key={type.key}><i style={{ backgroundColor: type.color }} />{type.label}</span>)}
+        </div>
+        {!reportOpen && !submittedEid && (
+          <button type="button" className="reels-map-report" onClick={openReport}>
+            <Plus size={19} /> Report Emergency
+          </button>
+        )}
       </div>
     </section>
   );

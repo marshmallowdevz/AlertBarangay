@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import './Official.css';
 import LoadingIndicator from './LoadingIndicator';
 
-const reportTypes = ['Medical', 'Fire', 'Rescue', 'Flooding', 'Power', 'Other'];
+const reportTypes = ['Medical', 'Fire', 'Rescue', 'Flooding', 'Power', 'Crime', 'Accident', 'Electrical Hazard', 'Garbage Collection', 'Road Damage', 'Water Problems', 'Other'];
 const reportStatuses = ['Pending', 'Assigned', 'In progress', 'Monitoring', 'Resolved', 'Closed'];
 const reportSeverities = ['Low', 'Medium', 'High'];
 
@@ -13,11 +13,25 @@ function formatDate(value) {
     : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 }
 
-export default function ReportsView({ reports, loading, error, onRetry }) {
+export default function ReportsView({ reports, loading, error, onRetry, onResolve }) {
   const [query, setQuery] = useState('');
   const [type, setType] = useState('All categories');
   const [status, setStatus] = useState('All statuses');
   const [severity, setSeverity] = useState('All severities');
+  const [resolvingId, setResolvingId] = useState('');
+  const [actionError, setActionError] = useState('');
+
+  const resolveIncident = async (report) => {
+    setResolvingId(report.databaseId);
+    setActionError('');
+    try {
+      await onResolve(report.databaseId);
+    } catch (resolveError) {
+      setActionError(resolveError.message || 'The incident could not be marked resolved.');
+    } finally {
+      setResolvingId('');
+    }
+  };
 
   const filteredReports = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -47,6 +61,7 @@ export default function ReportsView({ reports, loading, error, onRetry }) {
       </div>
       {loading && <LoadingIndicator message="Loading incident reports…" />}
       {error && <div className="error-row"><p className="form-error" role="alert">{error}</p><button type="button" className="btn btn-outline" onClick={onRetry} disabled={loading}>Retry</button></div>}
+      {actionError && <p className="form-error" role="alert">{actionError}</p>}
       {!loading && !error && filteredReports.length === 0 && <p className="empty">{reports.length ? 'No reports match these filters.' : 'No incident reports have been submitted yet.'}</p>}
       <div className="stack">
         {!error && filteredReports.map((report) => (
@@ -54,10 +69,23 @@ export default function ReportsView({ reports, loading, error, onRetry }) {
             <summary>
               <span><strong>{report.id}</strong><small>{report.type} · {report.location}</small></span>
               <span className={`status-pill status-${report.status.toLowerCase().replaceAll(' ', '-')}`}>{report.status}</span>
-              <span className={`severity-label severity-${report.severity.toLowerCase()}`}>{report.severity}</span>
+              {report.severity && <span className={`severity-label severity-${report.severity.toLowerCase()}`}>{report.severity}</span>}
             </summary>
             <p>{report.description}</p>
             <small>Reported by {report.author || 'Resident'} · {formatDate(report.created_at)}</small>
+            {onResolve && report.source === 'incident' && report.status !== 'Resolved' && (
+              <button type="button" className="btn btn-outline btn-small" onClick={() => resolveIncident(report)} disabled={Boolean(resolvingId)}>
+                {resolvingId === report.databaseId ? 'Saving…' : 'Mark as resolved'}
+              </button>
+            )}
+            {report.mediaItems?.length > 0 && (
+              <div className="report-media-preview">
+                <h3>Attachments</h3>
+                {report.mediaItems.map((item, index) => item.type === 'video'
+                  ? <video key={`${item.url}-${index}`} src={item.url} controls playsInline preload="metadata" />
+                  : <a key={`${item.url}-${index}`} href={item.url} target="_blank" rel="noreferrer"><img src={item.url} alt={`Attachment ${index + 1} for ${report.id}`} loading="lazy" /></a>)}
+              </div>
+            )}
             <h3>History</h3>
             {report.dispatchHistory?.length ? (
               <ol className="report-history">

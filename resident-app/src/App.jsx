@@ -1,20 +1,22 @@
 import { useState, useEffect, useRef, Fragment } from "react";
 import {
-  Home, FileText, Megaphone, Bell, ShieldCheck, Phone, CircleUserRound, Clapperboard, MessageSquare,
+  Home, FileText, Megaphone, Bell, ShieldCheck, Phone, CircleUserRound, Clapperboard,
   Flame, Waves, Car, Zap, Trash2, MapPin, Droplets, HeartPulse, ClipboardList, Clock,
   CheckCircle2, ChevronDown, ChevronRight, LogOut, User, Shield, Copy,
   LockKeyhole, Info, Sun, CalendarDays, CircleHelp, ImagePlus, Languages,
-  ArrowLeft, Eye, EyeOff,
+  Play, Pause, Volume2, VolumeX,
+  ArrowLeft, Eye, EyeOff, Map,
 } from "lucide-react";
 import { supabase, isConfigured, configError } from "./supabaseClient";
 import "./App.css";
 import "./landing.css";
 import { ReportMedia } from "./MediaPicker";
-import { uploadReportMedia } from "./media";
+import { getCommunityFileMediaType, getCommunityPostMediaKind, removeCommunityMedia, resolveCommunityPosts, resolveIncidentReports, uploadCommunityMedia } from "./communityMedia";
+import MediaSourceChooser from "./MediaSourceChooser";
 import ReelsMapView from "./ReelsMapView";
 
-const HOTLINE = "(02) 8123-4567";
-const HOTLINE_TEL = "tel:0281234567";
+const HOTLINE = "0932 537 7770";
+const HOTLINE_TEL = "tel:+639325377770";
 
 const EMERGENCY_TYPES = [
   { key: "Fire", incidentType: "fire", icon: Flame, color: "#c0392b" },
@@ -48,11 +50,14 @@ const SAFETY_TIPS = [
 ];
 
 const CONTACTS = [
-  { name: "Barangay Emergency Hotline", number: HOTLINE },
-  { name: "Barangay Hall", number: "(02) 8123-1000" },
-  { name: "Fire Station", number: "(02) 8123-2000" },
-  { name: "Police Station", number: "(02) 8123-3000" },
-  { name: "Health Center", number: "(02) 8123-4000" },
+  { name: "Philippine Red Cross", number: "143", tel: "tel:143" },
+  { name: "Cebu City Fire", number: "160", tel: "tel:160" },
+  { name: "Cebu City Police", number: "166", tel: "tel:166" },
+  { name: "CCDRRMO Rescue Hotline", number: HOTLINE, tel: HOTLINE_TEL },
+  { name: "Cebu City Hall", number: "(032) 411-0100", tel: "tel:+63324110100" },
+  { name: "Visayan Electric", number: "(032) 230-8326", tel: "tel:+63322308326" },
+  { name: "CCDRRMO Mambaling", number: "(032) 262-1424", tel: "tel:+63322621424" },
+  { name: "MCWD", number: "(032) 254-8434", tel: "tel:+63322548434" },
 ];
 
 const PAGES = [
@@ -87,6 +92,8 @@ const FILIPINO = {
   "Resident messages": "Mga mensahe ng residente", "No messages yet.": "Wala pang mga mensahe.", "No email provided": "Walang ibinigay na email",
   "Safety Tips": "Mga Paalala sa Kaligtasan", "Barangay Contacts": "Mga Contact ng Barangay", "Call": "Tumawag", "Copy": "Kopyahin",
   "Community Reels": "Mga Post ng Komunidad", "Share photos and videos with residents.": "Magbahagi ng mga larawan at video sa mga residente.",
+  "Live Incident Map": "Live na Mapa ng Insidente", "Tap to view active incidents on the map.": "Pindutin upang makita sa mapa ang mga aktibong insidente.", "Open live map": "Buksan ang live na mapa",
+  "No appointments to show.": "Walang mga appointment na ipapakita.",
   "Photo or video": "Larawan o video", "Caption": "Caption", "What's happening in your community?": "Ano ang nangyayari sa inyong komunidad?",
   "Share with residents": "Ibahagi sa mga residente", "Uploading…": "Ina-upload…", "No community posts yet.": "Wala pang mga post sa komunidad.",
   "Account": "Account", "Manage Profile": "Pamahalaan ang Profile", "Name": "Pangalan", "Choose profile picture": "Pumili ng larawan sa profile",
@@ -127,7 +134,7 @@ const toReport = (row, userId) => ({
     .map((h) => ({ status: h.status, date: fmtDate(h.created_at) })),
 });
 
-const toIncidentReport = (row, userId) => ({
+const toIncidentReport = (row, userId, statusHistory = []) => ({
   id: row.id,
   type: incidentLabel(row.type),
   location: `${Number(row.lat).toFixed(6)}, ${Number(row.lng).toFixed(6)}`,
@@ -139,15 +146,26 @@ const toIncidentReport = (row, userId) => ({
   createdAt: row.created_at,
   mine: row.reporter_id === userId,
   source: "incident",
-  history: [],
+  history: statusHistory.map((event) => ({
+    status: event.new_status === "responding"
+      ? "In Progress"
+      : event.new_status[0].toUpperCase() + event.new_status.slice(1),
+    date: fmtDate(event.created_at),
+  })),
 });
 
 const toNotification = (row) => ({
   id: row.id,
-  text: row.message,
+  type: row.event_type,
+  title: row.title,
+  body: row.body,
   time: fmtDate(row.created_at),
-  read: row.read,
+  read: Boolean(row.read),
 });
+
+const isMissingOptionalTable = (error) =>
+  ["42P01", "PGRST205"].includes(error?.code)
+  || /relation .* does not exist|could not find the table .* in the schema cache/i.test(error?.message || "");
 
 async function fetchReports(userId) {
   const [legacyResult, incidentResult] = await Promise.all([
@@ -159,19 +177,49 @@ async function fetchReports(userId) {
       .eq("reporter_id", userId)
       .order("created_at", { ascending: false }),
   ]);
+  const incidents = incidentResult.data || [];
+  const incidentIds = incidents.map((row) => row.id);
+  let historyResult = incidentIds.length
+    ? await supabase.from("incident_status_history")
+      .select("id, incident_id, previous_status, new_status, created_at")
+      .in("incident_id", incidentIds)
+      .order("created_at", { ascending: true })
+    : { data: [], error: null };
+  if (isMissingOptionalTable(historyResult.error)) historyResult = { data: [], error: null };
+  const incidentHistory = new Map();
+  for (const event of historyResult.data || []) {
+    const events = incidentHistory.get(event.incident_id) || [];
+    events.push(event);
+    incidentHistory.set(event.incident_id, events);
+  }
   const reports = [
     ...(legacyResult.data || []).map((row) => toReport(row, userId)),
-    ...(incidentResult.data || []).map((row) => toIncidentReport(row, userId)),
+    ...incidents.map((row) => toIncidentReport(row, userId, incidentHistory.get(row.id) || [])),
   ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  return { error: legacyResult.error || incidentResult.error, reports };
+  return { error: legacyResult.error || incidentResult.error || historyResult.error, reports };
 }
 
-async function fetchNotifications() {
+async function fetchNotifications(userId) {
   const { data, error } = await supabase
     .from("notifications")
-    .select("*")
-    .order("created_at", { ascending: false });
-  return { error, notifications: (data || []).map(toNotification) };
+    .select("id, event_type, title, body, report_id, announcement_id, incident_id, created_at")
+    .order("created_at", { ascending: false })
+    .limit(100);
+  if (error) return { error, notifications: [] };
+
+  const rows = data || [];
+  const notificationIds = rows.map((row) => row.id);
+  const readResult = notificationIds.length
+    ? await supabase.from("notification_reads")
+      .select("notification_id")
+      .eq("user_id", userId)
+      .in("notification_id", notificationIds)
+    : { data: [], error: null };
+  const readIds = new Set((readResult.data || []).map((row) => row.notification_id));
+  return {
+    error: readResult.error,
+    notifications: rows.map((row) => ({ ...toNotification(row), read: readIds.has(row.id) })),
+  };
 }
 
 async function fetchProfile(userId) {
@@ -191,6 +239,303 @@ function useClickOutside(ref, handler) {
     document.addEventListener("mousedown", listener);
     return () => document.removeEventListener("mousedown", listener);
   }, [ref, handler]);
+}
+
+function ReelUploadPreview({ file, onRemove }) {
+  const [previewUrl, setPreviewUrl] = useState("");
+
+  useEffect(() => {
+    if (!file) {
+      setPreviewUrl("");
+      return undefined;
+    }
+
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  if (!file || !previewUrl) return null;
+
+  const mediaType = getCommunityFileMediaType(file);
+  const sizeInMb = (file.size / (1024 * 1024)).toFixed(1);
+
+  return (
+    <div className="reel-upload-preview">
+      {mediaType === "video"
+        ? <video src={previewUrl} controls muted playsInline preload="metadata" />
+        : mediaType === "image"
+          ? <img src={previewUrl} alt="Selected community post" />
+          : <p className="hint">This file type is not supported. Choose a supported photo or video.</p>}
+      <div className="reel-preview-meta">
+        <small>{file.name} · {sizeInMb} MB</small>
+        <button type="button" className="link-btn danger" onClick={onRemove}>Remove</button>
+      </div>
+    </div>
+  );
+}
+
+function ReelPostMedia({ post }) {
+  const [failedUrl, setFailedUrl] = useState("");
+  const [muted, setMuted] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [activeMediaIndex, setActiveMediaIndex] = useState(0);
+  const [playbackBlocked, setPlaybackBlocked] = useState(false);
+  const videoRef = useRef(null);
+  const videoVisibleRef = useRef(false);
+  const userPausedRef = useRef(false);
+  const pointerStartRef = useRef(null);
+  const mediaItems = Array.isArray(post.media_urls)
+    ? post.media_urls.map((item) => {
+        const mediaUrl = typeof item === "string" ? item : item?.url || item?.signedUrl || "";
+        if (!mediaUrl) return null;
+        const itemType = typeof item === "object" ? item?.type || item?.media_type : "";
+        return {
+          url: mediaUrl,
+          type: ["image", "video"].includes(itemType)
+            ? itemType
+            : getCommunityPostMediaKind({ media_url: mediaUrl }),
+        };
+      }).filter(Boolean)
+    : [];
+  const singleUrl = post.displayMediaUrl || "";
+  if (!mediaItems.length && singleUrl) {
+    mediaItems.push({ url: singleUrl, type: post.displayMediaType || getCommunityPostMediaKind(post) });
+  }
+  const activeMedia = mediaItems[activeMediaIndex];
+  const url = activeMedia?.url || singleUrl;
+  const mediaType = activeMedia?.type || post.displayMediaType || getCommunityPostMediaKind(post);
+  const hasMedia = Boolean(post.media_path || post.media_paths?.length || post.media_url || post.media_urls?.length || url);
+
+  useEffect(() => {
+    setActiveMediaIndex(0);
+    videoVisibleRef.current = false;
+  }, [post.reelKey]);
+
+  useEffect(() => {
+    videoVisibleRef.current = false;
+    setPlaybackBlocked(false);
+    setMuted(false);
+    setIsPlaying(false);
+    userPausedRef.current = false;
+    videoRef.current?.pause();
+  }, [url]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || mediaType !== "video" || !url) return undefined;
+
+    let observer;
+    let isVisible = false;
+    // Mobile Safari and some Android browsers require inline playback to be
+    // set directly on the element. Reels default to audible playback.
+    video.defaultMuted = false;
+    video.muted = muted;
+    video.playsInline = true;
+    video.setAttribute("playsinline", "");
+    video.setAttribute("webkit-playsinline", "");
+
+    const attemptPlayback = () => {
+      if (!isVisible || document.hidden || userPausedRef.current) return;
+      video.muted = muted;
+      video.preload = "auto";
+      try {
+        Promise.resolve(video.play())
+          .then(() => setPlaybackBlocked(false))
+          .catch(() => setPlaybackBlocked(true));
+      } catch {
+        setPlaybackBlocked(true);
+      }
+    };
+    const updatePlayback = () => {
+      const isOnScreen = isVisible && !document.hidden;
+      const shouldPlay = isOnScreen && !userPausedRef.current;
+      videoVisibleRef.current = isOnScreen;
+      if (shouldPlay) attemptPlayback();
+      else {
+        video.pause();
+        if (!isOnScreen) setPlaybackBlocked(false);
+      }
+    };
+    if ("IntersectionObserver" in window) {
+      // Reels scroll inside their own feed, not the document viewport. Use
+      // that feed as the observer root so each swipe reliably activates the
+      // video in the newly visible card.
+      const feed = video.closest(".reel-feed");
+      const card = video.closest(".reel-card") || video;
+      observer = new IntersectionObserver(([entry]) => {
+        isVisible = Boolean(entry?.isIntersecting && entry.intersectionRatio >= 0.5);
+        updatePlayback();
+      }, { root: feed || null, threshold: [0, 0.25, 0.5, 0.75, 1] });
+      observer.observe(card);
+    } else {
+      isVisible = true;
+      videoVisibleRef.current = true;
+      updatePlayback();
+    }
+    const handleVisibilityChange = () => updatePlayback();
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      observer?.disconnect();
+      isVisible = false;
+      videoVisibleRef.current = false;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      video.pause();
+    };
+  }, [mediaType, muted, url]);
+
+  if (!hasMedia) return null;
+
+  const swipeToMedia = (direction) => {
+    if (mediaItems.length < 2) return;
+    setActiveMediaIndex((current) => Math.max(0, Math.min(mediaItems.length - 1, current + direction)));
+  };
+  const handlePointerDown = (event) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    pointerStartRef.current = { x: event.clientX, y: event.clientY };
+  };
+  const handlePointerUp = (event) => {
+    const start = pointerStartRef.current;
+    pointerStartRef.current = null;
+    if (!start || mediaItems.length < 2) return;
+    const deltaX = event.clientX - start.x;
+    const deltaY = event.clientY - start.y;
+    if (Math.abs(deltaX) < 42 || Math.abs(deltaX) < Math.abs(deltaY) * 1.2) return;
+    swipeToMedia(deltaX < 0 ? 1 : -1);
+  };
+
+  const mediaView = !url || failedUrl === url
+    ? <div className="reel-media-fallback" role="status">This photo or video could not be loaded.</div>
+    : mediaType === "video"
+      ? <video
+        ref={videoRef}
+        src={url}
+        muted={muted}
+        loop
+        playsInline
+        preload="metadata"
+        onCanPlay={(event) => {
+          if (!videoVisibleRef.current || document.hidden || userPausedRef.current) return;
+          event.currentTarget.muted = muted;
+          try {
+            Promise.resolve(event.currentTarget.play())
+              .then(() => setPlaybackBlocked(false))
+              .catch(() => setPlaybackBlocked(true));
+          } catch {
+            setPlaybackBlocked(true);
+          }
+        }}
+        onPlay={() => {
+          setIsPlaying(true);
+          setPlaybackBlocked(false);
+        }}
+        onPause={() => setIsPlaying(false)}
+        onError={() => setFailedUrl(url)}
+        />
+      : <img
+        src={url}
+        alt={post.caption || post.description || "Community post"}
+        loading="lazy"
+        draggable="false"
+        onError={() => setFailedUrl(url)}
+        />;
+
+  return (
+    <>
+      <div
+        className={`reel-media-wrap ${mediaItems.length > 1 ? "reel-media-carousel" : ""}`}
+        onPointerDown={mediaItems.length > 1 ? handlePointerDown : undefined}
+        onPointerUp={mediaItems.length > 1 ? handlePointerUp : undefined}
+        onPointerCancel={() => { pointerStartRef.current = null; }}
+        aria-label={mediaItems.length > 1 ? `Photo ${activeMediaIndex + 1} of ${mediaItems.length}` : undefined}
+      >
+        {mediaView}
+      </div>
+      {mediaType === "video" && url && failedUrl !== url && (
+        <>
+          {playbackBlocked && videoVisibleRef.current && (
+            <button
+              type="button"
+              className="reel-play-toggle"
+              onClick={() => {
+                userPausedRef.current = false;
+                const video = videoRef.current;
+                if (video) video.muted = muted;
+                try {
+                  Promise.resolve(video?.play())
+                    .then(() => setPlaybackBlocked(false))
+                    .catch(() => setPlaybackBlocked(true));
+                } catch {
+                  setPlaybackBlocked(true);
+                }
+              }}
+            >
+              Tap to play with sound
+            </button>
+          )}
+          <div className="reel-video-controls">
+            <button
+              type="button"
+              className="reel-playback-toggle"
+              aria-label={isPlaying ? "Pause video" : "Play video"}
+              onClick={() => {
+                const video = videoRef.current;
+                if (!video) return;
+                if (!video.paused) {
+                  userPausedRef.current = true;
+                  video.pause();
+                  setPlaybackBlocked(false);
+                  return;
+                }
+                userPausedRef.current = false;
+                video.muted = muted;
+                try {
+                  Promise.resolve(video.play())
+                    .then(() => setPlaybackBlocked(false))
+                    .catch(() => setPlaybackBlocked(true));
+                } catch {
+                  setPlaybackBlocked(true);
+                }
+              }}
+            >
+              {isPlaying ? <Pause size={17} /> : <Play size={17} />}
+            </button>
+            <button
+              type="button"
+              className="reel-audio-toggle"
+              aria-label={muted ? "Turn video sound on" : "Mute video"}
+              aria-pressed={!muted}
+              onClick={() => {
+                const video = videoRef.current;
+                setMuted((current) => {
+                  const nextMuted = !current;
+                  if (video) video.muted = nextMuted;
+                  return nextMuted;
+                });
+              }}
+            >
+              {muted ? <><VolumeX size={17} /> Sound off</> : <><Volume2 size={17} /> Sound on</>}
+            </button>
+          </div>
+        </>
+      )}
+      {mediaItems.length > 1 && (
+        <div className="reel-carousel-dots" role="group" aria-label="Choose report photo">
+          {mediaItems.map((item, index) => (
+            <button
+              key={`${item.url}-${index}`}
+              type="button"
+              className={`reel-carousel-dot ${index === activeMediaIndex ? "active" : ""}`}
+              aria-label={`Show photo ${index + 1} of ${mediaItems.length}`}
+              aria-current={index === activeMediaIndex ? "true" : undefined}
+              onClick={() => setActiveMediaIndex(index)}
+            />
+          ))}
+        </div>
+      )}
+    </>
+  );
 }
 
 /* ---------- App ---------- */
@@ -215,21 +560,22 @@ export default function App() {
   });
   const [profileOpen, setProfileOpen] = useState(false);
   const [toast, setToast] = useState("");
-  const [communityPosts, setCommunityPosts] = useState([]);
+  const [reelItems, setReelItems] = useState([]);
+  const [reelsLoading, setReelsLoading] = useState(false);
+  const [reelsFeedError, setReelsFeedError] = useState("");
   const [announcements, setAnnouncements] = useState([]);
   const [announcementTitle, setAnnouncementTitle] = useState("");
   const [announcementBody, setAnnouncementBody] = useState("");
   const [postCaption, setPostCaption] = useState("");
   const [postFile, setPostFile] = useState(null);
   const [posting, setPosting] = useState(false);
+  const [reelComposerOpen, setReelComposerOpen] = useState(false);
   const [messageBody, setMessageBody] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
   const [messages, setMessages] = useState([]);
-  const [appointmentSubscribed, setAppointmentSubscribed] = useState(false);
-  const [appointmentSubscriptionBusy, setAppointmentSubscriptionBusy] = useState(false);
-  const [appointmentSubscriptions, setAppointmentSubscriptions] = useState([]);
 
   const profileRef = useRef(null);
+  const reloadReelsRef = useRef(null);
   useClickOutside(profileRef, () => setProfileOpen(false));
 
   const userId = session?.user?.id;
@@ -280,7 +626,7 @@ export default function App() {
       const [profile, reportResult, notificationResult] = await Promise.all([
         fetchProfile(userId),
         fetchReports(userId),
-        fetchNotifications(),
+        fetchNotifications(userId),
       ]);
       if (cancelled) return;
       setUser({
@@ -291,7 +637,12 @@ export default function App() {
         avatarUrl: profile?.avatar_url || "",
       });
       setReports(reportResult.reports);
-      setNotifications(notificationResult.notifications);
+      setNotifications((current) => [...new Map([
+        ...notificationResult.notifications,
+        ...current,
+      ].map((notification) => [notification.id, notification])).values()]
+        .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+        .slice(0, 100));
       if (reportResult.error || notificationResult.error) {
         setToast("Some of your data could not be loaded.");
       }
@@ -304,14 +655,125 @@ export default function App() {
   }, [userId, userEmail, session?.user?.user_metadata?.full_name]);
 
   useEffect(() => {
-    if (!userId) return;
-    supabase.from("community_posts").select("*").order("created_at", { ascending: false })
-      .then(({ data, error }) => {
-        if (error) setToast("Reels are not set up yet. Apply the community feed database migration.");
-        else setCommunityPosts(data || []);
-      });
+    if (!userId) return undefined;
+    let active = true;
+    const loadReelItems = async () => {
+      setReelsLoading(true);
+      try {
+        const [communityResult, incidentResult, reportResult] = await Promise.all([
+          supabase.from("community_posts").select("*").order("created_at", { ascending: false }).limit(50),
+          supabase.from("incidents")
+            .select("id, eid, type, description, lat, lng, status, media_path, media_type, media_paths, media_types, created_at")
+            .order("created_at", { ascending: false })
+            .limit(50),
+          supabase.from("reports").select("*").order("created_at", { ascending: false }).limit(50),
+        ]);
+
+        if (!active) return;
+
+        if (communityResult.error) console.error("Unable to load community posts for Reels.", communityResult.error);
+        if (incidentResult.error) console.error("Unable to load emergency incidents for Reels.", incidentResult.error);
+        if (reportResult.error) console.error("Unable to load legacy emergency reports for Reels.", reportResult.error);
+
+        const [communityPosts, incidents] = await Promise.all([
+          communityResult.error ? [] : resolveCommunityPosts(supabase, communityResult.data || []),
+          incidentResult.error ? [] : resolveIncidentReports(supabase, incidentResult.data || []),
+        ]);
+        const legacyReports = reportResult.error ? [] : (reportResult.data || []).map((report) => ({
+          ...report,
+          media_urls: Array.isArray(report.media_urls)
+            ? report.media_urls
+            : report.media_urls
+              ? [report.media_urls]
+              : [],
+        })).map((report) => ({
+          ...report,
+          displayMediaUrl: report.media_urls[0] || "",
+          displayMediaType: report.media_urls[0]
+            ? getCommunityPostMediaKind({ media_url: report.media_urls[0] })
+            : "image",
+        }));
+
+        const items = [
+          ...communityPosts.map((post) => ({
+            ...post,
+            reelKind: "community",
+            reelKey: `community-${post.id}`,
+          })),
+          ...incidents.map((incident) => ({
+            ...incident,
+            reelKind: "incident",
+            reelKey: `incident-${incident.id}`,
+          })),
+          ...legacyReports.map((report) => ({
+            ...report,
+            reelKind: "legacy-report",
+            reelKey: `report-${report.id}`,
+          })),
+        ].sort((left, right) => new Date(right.created_at) - new Date(left.created_at));
+
+        if (active) {
+          setReelItems(items.slice(0, 100));
+          const failedSources = [
+            communityResult.error && "community posts",
+            incidentResult.error && "emergency reports",
+            reportResult.error && "older emergency reports",
+          ].filter(Boolean);
+          setReelsFeedError(failedSources.length
+            ? `Some Reels content could not load: ${failedSources.join(", ")}.`
+            : "");
+        }
+      } catch (feedError) {
+        console.error("Unable to load the resident Reels feed.", feedError);
+        if (active) setReelsFeedError("Reels could not load. Check your connection and refresh the page.");
+      } finally {
+        if (active) setReelsLoading(false);
+      }
+    };
+    reloadReelsRef.current = loadReelItems;
+    const channel = supabase.channel("resident-reels-feed")
+      .on("postgres_changes", { event: "*", schema: "public", table: "community_posts" }, loadReelItems)
+      .on("postgres_changes", { event: "*", schema: "public", table: "incidents" }, loadReelItems)
+      .on("postgres_changes", { event: "*", schema: "public", table: "reports" }, loadReelItems)
+      .subscribe();
+    loadReelItems();
     supabase.from("community_announcements").select("*").order("created_at", { ascending: false })
-      .then(({ data }) => setAnnouncements(data || []));
+      .then(({ data }) => { if (active) setAnnouncements(data || []); });
+    return () => {
+      active = false;
+      if (reloadReelsRef.current === loadReelItems) reloadReelsRef.current = null;
+      supabase.removeChannel(channel);
+    };
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return undefined;
+    let active = true;
+    const channel = supabase.channel("resident-notifications")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications" }, ({ new: row }) => {
+        const notification = { ...toNotification(row), read: false };
+        setNotifications((current) => {
+          const existing = current.find((item) => item.id === notification.id);
+          return [
+            existing ? { ...notification, read: existing.read } : notification,
+            ...current.filter((item) => item.id !== notification.id),
+          ].slice(0, 100);
+        });
+        if (row.event_type === "incident_status_changed") {
+          fetchReports(userId).then((result) => {
+            if (active) setReports(result.reports);
+          }).catch((error) => console.error("Could not refresh resident reports after a notification.", error));
+        }
+      })
+      .subscribe((status) => {
+        if (active && ["CHANNEL_ERROR", "TIMED_OUT"].includes(status)) {
+          setToast("Live notifications are unavailable. Refresh the page to check for updates.");
+        }
+      });
+    return () => {
+      active = false;
+      supabase.removeChannel(channel);
+    };
   }, [userId]);
 
   useEffect(() => {
@@ -323,25 +785,6 @@ export default function App() {
         else setMessages(data || []);
       });
   }, [userId, user.role]);
-
-  useEffect(() => {
-    if (!userId) {
-      setAppointmentSubscribed(false);
-      return;
-    }
-    supabase.from("appointment_subscriptions").select("user_id").eq("user_id", userId).maybeSingle()
-      .then(({ data, error }) => {
-        if (!error) setAppointmentSubscribed(Boolean(data));
-      });
-  }, [userId]);
-
-  useEffect(() => {
-    if (user.role !== "Admin") return;
-    supabase.from("appointment_subscriptions").select("user_id, full_name, email, created_at").order("created_at", { ascending: false })
-      .then(({ data, error }) => {
-        if (!error) setAppointmentSubscriptions(data || []);
-      });
-  }, [user.role]);
 
   useEffect(() => {
     if (!toast) return;
@@ -396,6 +839,7 @@ export default function App() {
   const handleIncidentSubmitted = async () => {
     const result = await fetchReports(userId);
     setReports(result.reports);
+    await reloadReelsRef.current?.();
     setToast("Emergency report submitted.");
   };
 
@@ -407,31 +851,6 @@ export default function App() {
     }
     setReports((prev) => prev.filter((r) => r.id !== id));
     setToast("Report cancelled.");
-  };
-
-  const toggleAppointmentSubscription = async () => {
-    if (!userId || appointmentSubscriptionBusy) return;
-    setAppointmentSubscriptionBusy(true);
-    const result = appointmentSubscribed
-      ? await supabase.from("appointment_subscriptions").delete().eq("user_id", userId)
-      : await supabase.from("appointment_subscriptions").insert({
-          user_id: userId,
-          full_name: user.name,
-          email: userEmail || "",
-        });
-    setAppointmentSubscriptionBusy(false);
-    if (result.error) {
-      setToast("Could not update your appointment notification preference. Apply the appointment subscription migration and try again.");
-      return;
-    }
-    const subscribed = !appointmentSubscribed;
-    setAppointmentSubscribed(subscribed);
-    if (user.role === "Admin") {
-      setAppointmentSubscriptions((current) => subscribed
-        ? [{ user_id: userId, full_name: user.name, email: userEmail || "", created_at: new Date().toISOString() }, ...current]
-        : current.filter((subscription) => subscription.user_id !== userId));
-    }
-    setToast(subscribed ? "You'll be notified when appointment booking becomes available." : "Appointment notifications turned off.");
   };
 
   const sendMessage = async (event) => {
@@ -455,7 +874,10 @@ export default function App() {
   };
 
   const markAllRead = async () => {
-    const { error } = await supabase.from("notifications").update({ read: true }).eq("read", false);
+    const { error } = await supabase.from("notification_reads").upsert(
+      notifications.map((notification) => ({ notification_id: notification.id, user_id: userId })),
+      { onConflict: "notification_id,user_id" },
+    );
     if (error) {
       setToast("Could not update notifications.");
       return;
@@ -465,13 +887,15 @@ export default function App() {
   };
 
   const markRead = async (id) => {
+    const { error } = await supabase.from("notification_reads").upsert(
+      { notification_id: id, user_id: userId },
+      { onConflict: "notification_id,user_id" },
+    );
+    if (error) {
+      setToast("Could not update this notification.");
+      return;
+    }
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
-    await supabase.from("notifications").update({ read: true }).eq("id", id);
-  };
-
-  const deleteNotification = async (id) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
-    await supabase.from("notifications").delete().eq("id", id);
   };
 
   const saveSettings = async (name) => {
@@ -544,21 +968,41 @@ export default function App() {
   const publishReel = async (event) => {
     event.preventDefault();
     if (!postFile) { setToast("Choose a photo or video first."); return; }
-    const maxBytes = (postFile.type.startsWith("video/") ? 40 : 10) * 1024 * 1024;
-    if (postFile.size > maxBytes) { setToast(`This file is too large. The limit is ${postFile.type.startsWith("video/") ? 40 : 10} MB.`); return; }
     setPosting(true);
+    let mediaPath = "";
+    let postSaved = false;
     try {
-      const [mediaUrl] = await uploadReportMedia(supabase, userId, [postFile]);
+      const upload = await uploadCommunityMedia(supabase, userId, postFile);
+      mediaPath = upload.path;
+      const { data: signedMedia, error: signedError } = await supabase.storage
+        .from("community-media")
+        .createSignedUrl(mediaPath, 86400);
+      if (signedError) throw signedError;
+      if (!signedMedia?.signedUrl) throw new Error("The uploaded media could not be opened. Check the community-media storage policy.");
       const { data, error } = await supabase.from("community_posts").insert({
-        user_id: userId, author_name: user.name, caption: postCaption.trim(), media_url: mediaUrl,
+        user_id: userId,
+        author_name: user.name,
+        caption: postCaption.trim(),
+        media_path: mediaPath,
+        media_type: upload.mediaType,
       }).select().single();
       if (error) throw error;
-      setCommunityPosts((posts) => [data, ...posts]);
+      postSaved = true;
+      setReelItems((items) => [{
+        ...data,
+        reelKind: "community",
+        reelKey: `community-${data.id}`,
+        displayMediaType: upload.mediaType,
+        displayMediaUrl: signedMedia.signedUrl,
+      }, ...items].slice(0, 100));
       setPostCaption(""); setPostFile(null);
       event.target.reset();
+      setReelComposerOpen(false);
       setToast("Your post is live in the community feed.");
-    } catch {
-      setToast("Could not publish. Check the community feed setup and try again.");
+    } catch (error) {
+      if (mediaPath && !postSaved) await removeCommunityMedia(supabase, mediaPath);
+      console.error("Could not publish a community reel.", error);
+      setToast(error.message || "Could not publish. Apply the shared Reels and notifications migration, then try again.");
     } finally { setPosting(false); }
   };
 
@@ -574,12 +1018,25 @@ export default function App() {
   };
 
   const copyNumber = async (number) => {
+    let copied = false;
     try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard permission is unavailable.");
       await navigator.clipboard.writeText(number);
-      setToast(`Copied ${number}`);
+      copied = true;
     } catch {
-      setToast("Could not copy. Please copy it manually.");
+      const field = document.createElement("textarea");
+      field.value = number;
+      field.setAttribute("readonly", "");
+      field.style.position = "fixed";
+      field.style.opacity = "0";
+      document.body.appendChild(field);
+      field.focus();
+      field.select();
+      try { copied = document.execCommand("copy"); }
+      catch { copied = false; }
+      field.remove();
     }
+    setToast(copied ? `Copied ${number}` : "Could not copy. Please copy it manually.");
   };
 
   if (!isConfigured) return <SetupNotice detail={configError} />;
@@ -589,7 +1046,7 @@ export default function App() {
   return (
     <div className="app">
       {/* MAIN */}
-      <div className="main">
+      <div className={`main ${page === "reels" ? "reels-main" : ""}`}>
         <header className="topbar">
           <div className="welcome">
             <h1>{language === "fil" ? "Maligayang pagbabalik," : "Welcome back,"} {user.name}!</h1>
@@ -638,7 +1095,7 @@ export default function App() {
           </div>
         </header>
 
-        <main className="content">
+        <main className={`content ${page === "reels" ? "reels-content" : ""}`}>
           {page === "dashboard" && (
             <DashboardPage
               myCount={myReports.length}
@@ -647,6 +1104,8 @@ export default function App() {
               unread={unread}
               goTo={goTo}
               openReport={openEmergencyReport}
+              openMap={openIncidentMap}
+              copyNumber={copyNumber}
               language={language}
             />
           )}
@@ -695,14 +1154,14 @@ export default function App() {
                 {notifications.map((n) => (
                   <article key={n.id} className={`list-item row ${n.read ? "" : "unread"}`}>
                     <div>
-                      <p>{n.text}</p>
+                      <strong>{n.title}</strong>
+                      <p>{n.body}</p>
                       <small>{n.time}</small>
                     </div>
                     <div className="row-actions">
                       {!n.read && (
                         <button className="link-btn" onClick={() => markRead(n.id)}>{tr("Mark as read", language)}</button>
                       )}
-                      <button className="link-btn danger" onClick={() => deleteNotification(n.id)}>{tr("Delete", language)}</button>
                     </div>
                   </article>
                 ))}
@@ -726,16 +1185,7 @@ export default function App() {
 
           {page === "appointments" && (
             <section className="card appointments-page">
-              <h2>{tr("Appointments", language)}</h2>
-              <AppointmentsPanel
-                language={language}
-                subscribed={appointmentSubscribed}
-                subscribing={appointmentSubscriptionBusy}
-                isAdmin={user.role === "Admin"}
-                subscriptions={appointmentSubscriptions}
-                onNotify={toggleAppointmentSubscription}
-                onChat={() => goTo("messages")}
-              />
+              <p className="empty">{tr("No appointments to show.", language)}</p>
             </section>
           )}
 
@@ -764,7 +1214,7 @@ export default function App() {
                       <p>{c.number}</p>
                     </div>
                     <div className="row-actions">
-                      <a className="btn btn-outline" href={`tel:${c.number.replace(/[^\d+]/g, "")}`}>
+                      <a className="btn btn-outline" href={c.tel}>
                         <Phone size={16} /> {tr("Call", language)}
                       </a>
                       <button className="btn btn-outline" onClick={() => copyNumber(c.number)}>
@@ -779,25 +1229,71 @@ export default function App() {
 
           {page === "reels" && (
             <section className="reels-page">
-              <div className="card reels-compose">
-                <div className="card-head reels-heading">
+              <div className="reels-toolbar">
+                <div className="reels-heading">
                   <div>
                     <h2>{tr("Community Reels", language)}</h2>
-                    <p className="muted">{tr("Share photos and videos with residents.", language)}</p>
+                    <p className="muted">Swipe up or down for community posts and emergency reports.</p>
                   </div>
-                  <button type="button" className="btn btn-outline reels-map-link" onClick={openIncidentMap}><MapPin size={16} /> Incident map</button>
                 </div>
-                <p className="hint reels-map-hint">Double-tap Reels in the bottom navigation to open or close the live incident map.</p>
+                <div className="reels-toolbar-actions">
+                  <button type="button" className="btn btn-outline reels-map-link" onClick={openIncidentMap}><MapPin size={16} /> Incident map</button>
+                  <button type="button" className="btn btn-maroon reels-create-button" onClick={() => setReelComposerOpen(true)}><ImagePlus size={17} /> Post</button>
+                </div>
+              </div>
+              <div className={`card reels-compose ${reelComposerOpen ? "reel-compose-open" : "reel-compose-hidden"}`}>
+                <div className="card-head reels-heading">
+                  <div>
+                    <h2>Share a community post</h2>
+                    <p className="muted">Choose a photo or video and add a caption.</p>
+                  </div>
+                  <button type="button" className="btn btn-outline reels-map-link" onClick={() => setReelComposerOpen(false)}>Close</button>
+                </div>
                 <form onSubmit={publishReel} className="reel-form">
-                  <label>{tr("Photo or video", language)}<input type="file" accept="image/*,video/*" onChange={(e) => setPostFile(e.target.files?.[0] || null)} required /></label>
+                  <div className="reel-media-source-field">
+                    <span>{tr("Photo or video", language)}</span>
+                    <MediaSourceChooser
+                      buttonLabel={postFile ? "Choose another file" : "Choose gallery or camera"}
+                      galleryAccept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime,video/3gpp"
+                      onFiles={(files) => setPostFile(files[0] || null)}
+                    />
+                  </div>
+                  <ReelUploadPreview file={postFile} onRemove={() => setPostFile(null)} />
                   <label>{tr("Caption", language)}<textarea value={postCaption} onChange={(e) => setPostCaption(e.target.value)} rows={2} maxLength={500} placeholder={tr("What's happening in your community?", language)} /></label>
                   <button className="btn btn-maroon" disabled={posting}>{posting ? (language === "fil" ? "Ina-upload…" : "Uploading…") : tr("Share with residents", language)}</button>
                 </form>
-                <p className="hint">Live video needs a streaming service that is not connected to this app yet. For an active fire, call {HOTLINE} and submit an emergency report. Uploaded videos and photos are shared with residents here.</p>
+                <p className="hint">Choose one photo or video up to 40 MB. Live streaming is not supported. For an active emergency, call {HOTLINE} and submit an emergency report.</p>
               </div>
               <div className="reel-feed">
-                {communityPosts.length === 0 && <section className="card empty">No community posts yet.</section>}
-                {communityPosts.map((post) => <article className="card reel-card" key={post.id}><div className="reel-meta"><strong>{post.author_name || "Resident"}</strong><small>{fmtDate(post.created_at)}</small></div>{post.media_url?.match(/\.(mp4|mov|webm|3gp|m4v)(\?.*)?$/i) ? <video src={post.media_url} controls playsInline /> : <img src={post.media_url} alt={post.caption || "Community post"} />}<p>{post.caption}</p></article>)}
+                {reelsFeedError && <section className="card reel-feed-warning" role="status">{reelsFeedError}</section>}
+                {reelsLoading && <section className="card empty">Loading Reels and emergency reports...</section>}
+                {!reelsLoading && reelItems.length === 0 && !reelsFeedError && <section className="card empty">No community posts or emergency reports yet.</section>}
+                {reelItems.map((item) => (
+                  <article className={`card reel-card ${item.reelKind === "community" ? "" : "reel-report-card"}`} key={item.reelKey}>
+                    <ReelPostMedia post={item} />
+                    {item.reelKind === "community" ? (
+                      <div className="reel-overlay">
+                        <div className="reel-meta"><strong>{item.author_name || "Resident"}</strong><small>{fmtDate(item.created_at)}</small></div>
+                        {item.caption && <p>{item.caption}</p>}
+                      </div>
+                    ) : (
+                      <div className="reel-overlay reel-report-overlay">
+                        <div className="reel-report-meta">
+                          <span className="reel-type-label">Emergency report</span>
+                          <small>{fmtDate(item.created_at)}</small>
+                        </div>
+                        <h3>{item.reelKind === "incident" ? incidentLabel(item.type) : item.type || "Emergency"}</h3>
+                        {item.description && <p>{item.description}</p>}
+                        <div className="reel-report-details">
+                          {(item.eid || item.report_code) && <span>Report ID: {item.eid || item.report_code}</span>}
+                          {item.status && <span>Status: {String(item.status).replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())}</span>}
+                          {item.severity && <span>Severity: {item.severity}</span>}
+                          {item.location && <span>Location: {item.location}</span>}
+                        </div>
+                      </div>
+                    )}
+                  </article>
+                ))}
               </div>
             </section>
           )}
@@ -830,7 +1326,7 @@ export default function App() {
 
 /* ---------- Dashboard ---------- */
 
-function DashboardPage({ myCount, inProgress, resolved, unread, goTo, openReport, language }) {
+function DashboardPage({ myCount, inProgress, resolved, unread, goTo, openReport, openMap, copyNumber, language }) {
   const stats = [
     { icon: ClipboardList, value: myCount, label: tr("My Reports", language), sub: tr("View your submitted reports", language), to: "reports" },
     { icon: Clock, value: inProgress, label: tr("In Progress", language), sub: tr("Reports being reviewed", language), to: "reports" },
@@ -852,6 +1348,35 @@ function DashboardPage({ myCount, inProgress, resolved, unread, goTo, openReport
         ))}
       </div>
 
+      <div
+        className="live-map-preview"
+        role="button"
+        tabIndex={0}
+        onClick={openMap}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openMap();
+          }
+        }}
+        aria-label={tr("Open live map", language)}
+      >
+        <iframe
+          title="OpenStreetMap preview of the barangay area"
+          src="https://www.openstreetmap.org/export/embed.html?bbox=123.915%2C10.285%2C123.985%2C10.345&layer=mapnik"
+          loading="lazy"
+          tabIndex={-1}
+          aria-hidden="true"
+        />
+        <div className="live-map-preview-content">
+          <span className="live-map-preview-icon"><Map size={22} /></span>
+          <strong>{tr("Live Incident Map", language)}</strong>
+          <span>{tr("Tap to view active incidents on the map.", language)}</span>
+          <b>{tr("Open live map", language)} <MapPin size={15} /></b>
+        </div>
+        <small className="live-map-attribution">© OpenStreetMap</small>
+      </div>
+
       <div className="grid-2">
         <section className="card">
           <h2>{tr("Report an Emergency", language)}</h2>
@@ -863,13 +1388,27 @@ function DashboardPage({ myCount, inProgress, resolved, unread, goTo, openReport
           <section className="card">
             <h2>{tr("Emergency Hotline", language)}</h2>
             <p className="muted">{tr("Need immediate assistance?", language)}</p>
-            <a className="hotline" href={HOTLINE_TEL}>
-              <Phone size={24} />
-              <span>
-                <strong>{HOTLINE}</strong>
-                <small>{tr("Barangay Emergency Hotline", language)}</small>
-              </span>
-            </a>
+            <div className="emergency-contact-box">
+              <div className="who-to-call-heading">
+                <h3><Phone size={17} /> {language === "fil" ? "Sino ang tatawagan" : "Who to call"}</h3>
+              </div>
+              <div className="contact-grid">
+                {CONTACTS.map((contact) => (
+                  <article className="contact-card" key={contact.name}>
+                    <strong>{contact.name}</strong>
+                    <p>{contact.number}</p>
+                    <div className="contact-actions">
+                      <a className="btn btn-outline" href={contact.tel} aria-label={`Call ${contact.name}`}>
+                        <Phone size={15} /> {tr("Call", language)}
+                      </a>
+                      <button className="btn btn-outline" type="button" onClick={() => copyNumber(contact.number)} aria-label={`Copy ${contact.name} number`}>
+                        <Copy size={15} /> {tr("Copy", language)}
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
             <p className="available">{tr("Available 24/7", language)}</p>
           </section>
         </div>
@@ -977,7 +1516,10 @@ function SettingsPage({ user, email, language, onLanguageChange, onSave, onAvata
         <ProfileRow icon={User} label={tr("Manage Profile", language)} active={section === "manage"} onClick={() => setSection(section === "manage" ? "" : "manage")} />
         {section === "manage" && <form className="profile-detail manage-profile-form" onSubmit={(e) => { e.preventDefault(); if (name.trim()) onSave(name.trim()); }}>
           <label>{tr("Name", language)}<input value={name} onChange={(e) => setName(e.target.value)} required /></label>
-          <label className="photo-upload"><ImagePlus size={18} /> <span>{tr("Choose profile picture", language)}</span><input type="file" accept="image/*" onChange={(e) => setAvatarFile(e.target.files?.[0] || null)} /></label>
+          <div className="photo-upload"><ImagePlus size={18} /> <span>{tr("Choose profile picture", language)}</span>
+            <MediaSourceChooser buttonLabel={avatarFile ? "Choose another picture" : "Choose gallery or camera"} galleryAccept="image/*" allowVideos={false} onFiles={(files) => setAvatarFile(files[0] || null)} />
+            {avatarFile && <small>{avatarFile.name}</small>}
+          </div>
           <div className="profile-form-actions"><button className="btn btn-outline" type="submit">{tr("Save name", language)}</button><button className="btn btn-maroon" type="button" disabled={!avatarFile || avatarBusy} onClick={async () => { setAvatarBusy(true); const ok = await onAvatarUpload(avatarFile); if (ok) setAvatarFile(null); setAvatarBusy(false); }}>{avatarBusy ? tr("Uploading…", language) : tr("Upload picture", language)}</button></div>
         </form>}
         <ProfileRow icon={LockKeyhole} label={tr("Password & Security", language)} active={section === "security"} onClick={() => setSection(section === "security" ? "" : "security")} />
@@ -1003,44 +1545,6 @@ function SettingsPage({ user, email, language, onLanguageChange, onSave, onAvata
         {section === "help" && <p className="profile-detail">{language === "fil" ? <>Para sa agarang emergency, tumawag sa <a href={HOTLINE_TEL}>{HOTLINE}</a>. Maaari kang magsumite ng ulat mula sa Tahanan at tingnan ang status nito sa Mga Abiso.</> : <>For urgent emergencies, call <a href={HOTLINE_TEL}>{HOTLINE}</a>. You can submit a report from Home and check its status in Notifications.</>}</p>}
       </ProfileGroup>
     </section>
-  );
-}
-
-function AppointmentsPanel({ language, subscribed, subscribing, isAdmin, subscriptions, onNotify, onChat }) {
-  const hallPhone = CONTACTS.find((contact) => contact.name === "Barangay Hall")?.number || HOTLINE;
-  const services = language === "fil"
-    ? ["Barangay clearance", "Sertipiko ng paninirahan", "Sertipiko ng indigency", "Iskedyul ng mediation"]
-    : ["Barangay clearance", "Certificate of residency", "Certificate of indigency", "Mediation schedule"];
-
-  return (
-    <div className="profile-detail appointment-panel">
-      <div className="appointment-coming-soon">
-        <span className="appointment-calendar-icon"><CalendarDays size={28} /></span>
-        <h3>{language === "fil" ? "Malapit nang maging available ang online booking" : "Online booking is coming soon"}</h3>
-        <p>{language === "fil" ? "Sa ngayon, bumisita o tumawag sa barangay hall upang magpa-iskedyul ng appointment." : "For now, please visit or call the barangay hall to schedule your appointment."}</p>
-      </div>
-
-      <div className="appointment-details">
-        <strong>{language === "fil" ? "Barangay hall" : "Barangay hall"}</strong>
-        <div className="appointment-detail-row"><span>{language === "fil" ? "Address" : "Address"}</span><b>[HALL ADDRESS]</b></div>
-        <div className="appointment-detail-row"><span>{language === "fil" ? "Telepono" : "Phone"}</span><b>{hallPhone}</b></div>
-        <div className="appointment-detail-row"><span>{language === "fil" ? "Oras" : "Hours"}</span><b>[OFFICE HOURS]</b></div>
-      </div>
-
-      <div className="appointment-planned">
-        <strong>{language === "fil" ? "Planong i-book online" : "Planned for booking"}</strong>
-        <div className="appointment-service-list">{services.map((service) => <span key={service}>{service}</span>)}</div>
-      </div>
-
-      <div className="appointment-actions">
-        <div className="appointment-contact-group">
-          <a className="appointment-contact-call" href={`tel:${hallPhone.replace(/[^\d+]/g, "")}`}><Phone size={16} />{language === "fil" ? "Tawag" : "Call"}</a>
-          <button className="appointment-contact-chat" type="button" onClick={onChat}><MessageSquare size={16} />{language === "fil" ? "Chat" : "Chat"}</button>
-        </div>
-        <button className="btn btn-outline" type="button" onClick={onNotify} disabled={subscribing}>{subscribing ? (language === "fil" ? "Sandali…" : "Please wait…") : subscribed ? (language === "fil" ? "I-off ang mga abiso" : "Turn off notifications") : (language === "fil" ? "Ipaalam kapag available na" : "Notify me when available")}</button>
-      </div>
-      {isAdmin && <section className="appointment-subscribers"><div className="row"><h3>{language === "fil" ? "Mga residenteng gustong maabisuhan" : "Residents to notify"}</h3>{subscriptions.length > 0 && <a className="btn btn-outline" href={`mailto:${subscriptions.map((subscriber) => subscriber.email).join(",")}?subject=${encodeURIComponent("Appointment booking is now available")}`}>{language === "fil" ? "I-email ang lahat" : "Email all"}</a>}</div>{subscriptions.length === 0 ? <p className="muted">{language === "fil" ? "Wala pang naka-subscribe." : "No residents have subscribed yet."}</p> : <ul>{subscriptions.map((subscriber) => <li key={subscriber.user_id}><strong>{subscriber.full_name}</strong> · <a href={`mailto:${subscriber.email}`}>{subscriber.email}</a></li>)}</ul>}</section>}
-    </div>
   );
 }
 

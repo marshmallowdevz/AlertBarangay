@@ -28,7 +28,7 @@ Deno.serve(async (request) => {
   const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const { data: incidents, error: queryError } = await supabase
     .from("incidents")
-    .select("id, media_path, media_type")
+    .select("id, media_path, media_type, media_paths, media_types")
     .eq("status", "resolved")
     .lt("created_at", cutoff)
     .not("media_path", "is", null);
@@ -40,7 +40,10 @@ Deno.serve(async (request) => {
   let cleaned = 0;
   let failed = 0;
   for (const incident of incidents || []) {
-    const paths = [incident.media_path, `${incident.media_path}.thumb`];
+    const mediaPaths = Array.isArray(incident.media_paths) && incident.media_paths.length
+      ? incident.media_paths
+      : [incident.media_path].filter(Boolean);
+    const paths = mediaPaths.flatMap((path) => [path, `${path}.thumb`]);
 
     const { error: removeError } = await supabase.storage.from("incident-media").remove(paths);
     if (removeError) {
@@ -51,7 +54,7 @@ Deno.serve(async (request) => {
 
     const { error: updateError } = await supabase
       .from("incidents")
-      .update({ media_path: null, media_type: null })
+      .update({ media_path: null, media_type: null, media_paths: [], media_types: [] })
       .eq("id", incident.id);
     if (updateError) {
       console.error("Could not clear old incident media path", incident.id, updateError.message);

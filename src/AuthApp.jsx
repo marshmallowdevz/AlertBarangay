@@ -22,18 +22,20 @@ function AccessDenied({ onSignOut }) {
   return (
     <main className="logout-screen">
       <h1>Access denied</h1>
-      <p>This account is not provisioned as a barangay official.</p>
+      <p>This account is not provisioned as a barangay official or admin.</p>
       {error && <p className="logout-error" role="alert">{error}</p>}
       <button type="button" className="btn btn-gold" onClick={signOut}>Sign out</button>
     </main>
   );
 }
 
-function isOfficial(user) {
-  return user?.app_metadata?.barangay_role === 'official';
+function staffClaim(user) {
+  const role = user?.app_metadata?.barangay_role ?? user?.app_metadata?.role;
+  const normalized = String(role || '').toLowerCase();
+  return ['official', 'admin'].includes(normalized) ? normalized : '';
 }
 
-const authEnabled = import.meta.env.VITE_REQUIRE_AUTH === 'true';
+const authEnabled = import.meta.env.VITE_REQUIRE_AUTH !== 'false';
 
 export default function AuthApp({ LandingPage } = {}) {
   if (window.location.pathname === '/' && LandingPage) return <LandingPage />;
@@ -45,6 +47,9 @@ function AuthenticatedApp({ LandingPage }) {
   const [pathname, setPathname] = useState(() => window.location.pathname);
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(isConfigured);
+  const [staffRole, setStaffRole] = useState('');
+  const [staffLoading, setStaffLoading] = useState(false);
+  const [staffCheckedUserId, setStaffCheckedUserId] = useState('');
 
   useEffect(() => {
     const handlePopState = () => setPathname(window.location.pathname);
@@ -80,6 +85,47 @@ function AuthenticatedApp({ LandingPage }) {
   }, []);
 
   useEffect(() => {
+    let active = true;
+    const user = session?.user;
+    if (!user) {
+      setStaffRole('');
+      setStaffLoading(false);
+      setStaffCheckedUserId('');
+      return () => { active = false; };
+    }
+
+    const claimedRole = staffClaim(user);
+    if (claimedRole) {
+      setStaffRole(claimedRole);
+      setStaffLoading(false);
+      setStaffCheckedUserId(user.id);
+      return () => { active = false; };
+    }
+
+    setStaffRole('');
+    setStaffCheckedUserId('');
+    setStaffLoading(true);
+    supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (error) throw error;
+        const role = String(data?.role || '').toLowerCase();
+        setStaffRole(['official', 'admin'].includes(role) ? role : '');
+        setStaffCheckedUserId(user.id);
+      })
+      .catch((error) => {
+        if (active) {
+          console.error('Unable to verify the barangay role.', error);
+          setStaffRole('');
+          setStaffCheckedUserId(user.id);
+        }
+      })
+      .finally(() => { if (active) setStaffLoading(false); });
+
+    return () => { active = false; };
+  }, [session?.user?.id, session?.user?.app_metadata?.barangay_role, session?.user?.app_metadata?.role]);
+
+  useEffect(() => {
     if (authLoading) return;
     if (pathname === '/') {
       if (LandingPage) return;
@@ -106,11 +152,12 @@ function AuthenticatedApp({ LandingPage }) {
 
   if (authLoading) return <AuthStatus>Loading your account...</AuthStatus>;
   if (pathname === '/' && LandingPage) return <LandingPage />;
-  if (pathname === '/dashboard' && session && !isOfficial(session.user)) {
+  if (pathname === '/dashboard' && session && (staffLoading || staffCheckedUserId !== session.user.id)) return <AuthStatus>Checking barangay access...</AuthStatus>;
+  if (pathname === '/dashboard' && session && !staffRole) {
     return <AccessDenied onSignOut={signOut} />;
   }
   if (pathname === '/dashboard' && session) {
-    return <Official user={session.user} onSignOut={signOut} />;
+    return <Official user={session.user} staffRole={staffRole} onSignOut={signOut} />;
   }
   return <LoginView onSignIn={signIn} configMessage={!isConfigured ? configError : ''} />;
 }
