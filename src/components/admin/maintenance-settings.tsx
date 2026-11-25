@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { errorMessage, fetchJson } from "@/lib/fetch-json";
 import { ArrowLeft, CheckCircle2, CircleAlert, Clock3, LoaderCircle, Save, ShieldCheck, Wrench } from "lucide-react";
 
 type Settings = { maintenance_mode: boolean; maintenance_message: string; updated_at: string; updated_by: string | null };
+const fetchSettings = () => fetchJson<Settings>("/api/admin/settings/maintenance");
 const defaultMessage = "AlertBarangay is currently undergoing scheduled maintenance. Please check back shortly.";
 
 export function MaintenanceSettings() {
@@ -19,16 +21,19 @@ export function MaintenanceSettings() {
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
-    try {
-      const response = await fetch("/api/admin/settings/maintenance", { cache: "no-store" });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Unable to load maintenance settings.");
-      setSettings(result); setMessage(result.maintenance_message);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to load maintenance settings."); }
+    try { const result = await fetchSettings(); setSettings(result); setMessage(result.maintenance_message); }
+    catch (cause) { setError(errorMessage(cause, "Unable to load maintenance settings.")); }
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    let active = true;
+    fetchSettings()
+      .then((result) => { if (active) { setSettings(result); setMessage(result.maintenance_message); } })
+      .catch((cause) => { if (active) setError(errorMessage(cause, "Unable to load maintenance settings.")); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
   useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(() => setToast(""), 3500);

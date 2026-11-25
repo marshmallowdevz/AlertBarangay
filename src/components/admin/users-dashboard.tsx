@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { CircleAlert, Edit3, KeyRound, Plus, Search, Trash2, Users, X } from "lucide-react";
+import { CircleAlert, Edit3, KeyRound, Plus, Search, Trash2, Users, X, Eye, EyeOff } from "lucide-react";
 import type { ManagedUser, UserDraft, UserRole } from "@/types/user";
 
 type UserGroup = "all" | "residents" | "officials";
@@ -46,11 +46,16 @@ export function UsersDashboard({ currentUserId, previewMode = false, initialFilt
   const [dialogError, setDialogError] = useState("");
   const [toast, setToast] = useState("");
 
-  useEffect(() => {
+  // When the URL filters change (e.g. clicking an Overview card), reset the
+  // local filter state during render instead of in an effect.
+  const filterKey = `${initialFilters.group}|${initialFilters.role}|${initialFilters.status}`;
+  const [appliedFilterKey, setAppliedFilterKey] = useState(filterKey);
+  if (appliedFilterKey !== filterKey) {
+    setAppliedFilterKey(filterKey);
     setGroup(initialFilters.group);
     setRole(initialFilters.role);
     setStatus(initialFilters.status);
-  }, [initialFilters.group, initialFilters.role, initialFilters.status]);
+  }
 
   function syncFilters(next: InitialFilters) {
     const params = new URLSearchParams(window.location.search);
@@ -126,7 +131,7 @@ export function UsersDashboard({ currentUserId, previewMode = false, initialFilt
       : group !== "all" ? `Showing: ${group === "residents" ? "Residents" : "Officials & admins"}` : "";
   function openEdit(user: ManagedUser) {
     setDraft({ email: user.email, password: "", full_name: user.full_name, role: user.role, position: user.position ?? "", department: user.department ?? "" });
-    setDialogError(""); setDialog({ type: "edit", user });
+    setDialogError(""); setActiveStatus(user.is_active); setDialog({ type: "edit", user });
   }
   function closeDialog() { if (!saving) { setDialog(null); setDialogError(""); setPassword(""); setConfirmPassword(""); } }
 
@@ -179,7 +184,6 @@ export function UsersDashboard({ currentUserId, previewMode = false, initialFilt
     finally { setSaving(false); }
   }
 
-  useEffect(() => { if (dialog?.type === "edit") setActiveStatus(dialog.user.is_active); }, [dialog]);
 
   return <div className="page-wrap">
     <div className="topline"><div className="breadcrumb"><strong>User management</strong></div></div>
@@ -203,7 +207,7 @@ export function UsersDashboard({ currentUserId, previewMode = false, initialFilt
           <select className="filter-select" aria-label="Filter by status" value={status} onChange={(e) => { setStatus(e.target.value); syncFilters({ group, role, status: e.target.value }); }}><option value="all">All status</option><option value="active">Active</option><option value="disabled">Disabled</option></select>
         </div>
       </div>
-      {loading ? <div className="loading-state" aria-label="Loading user accounts"><div className="skeleton" /><div className="skeleton" /><div className="skeleton" /></div> : loadError ? <div className="empty-state"><div className="empty-icon"><CircleAlert size={20} /></div><strong>Couldn't load accounts</strong><p>{loadError}</p><button className="button secondary" style={{ marginTop: 14 }} onClick={() => void loadUsers()}>Try again</button></div> : users.length === 0 ? <div className="empty-state"><div className="empty-icon"><Users size={20} /></div><strong>{search || role !== "all" || status !== "all" ? "No matching accounts" : "No accounts yet"}</strong><p>{search || role !== "all" || status !== "all" ? "Try changing your filters or search terms." : "Create an account to get started."}</p>{!previewMode && !search && role === "all" && status === "all" && <button className="button primary" style={{ marginTop: 14 }} onClick={openCreate}><Plus size={15} />Create account</button>}</div> : <>
+      {loading ? <div className="loading-state" aria-label="Loading user accounts"><div className="skeleton" /><div className="skeleton" /><div className="skeleton" /></div> : loadError ? <div className="empty-state"><div className="empty-icon"><CircleAlert size={20} /></div><strong>Couldn&apos;t load accounts</strong><p>{loadError}</p><button className="button secondary" style={{ marginTop: 14 }} onClick={() => void loadUsers()}>Try again</button></div> : users.length === 0 ? <div className="empty-state"><div className="empty-icon"><Users size={20} /></div><strong>{search || role !== "all" || status !== "all" ? "No matching accounts" : "No accounts yet"}</strong><p>{search || role !== "all" || status !== "all" ? "Try changing your filters or search terms." : "Create an account to get started."}</p>{!previewMode && !search && role === "all" && status === "all" && <button className="button primary" style={{ marginTop: 14 }} onClick={openCreate}><Plus size={15} />Create account</button>}</div> : <>
         <div className="table-scroll"><table className="user-table"><thead><tr><th>User</th><th>Role</th><th>Position / department</th><th>Status</th><th>Created</th><th>Last sign in</th><th aria-label="Actions" /></tr></thead><tbody>
           {users.map((user) => <tr key={user.id}><td><div className="user-cell"><span className="user-avatar">{initials(user.full_name, user.email)}</span><span><span className="user-name">{user.full_name || "Unnamed user"}</span><span className="user-email"><small className="user-email-label">Email</small>{user.email}</span></span></div></td>
             <td><span className={`role-pill ${user.role}`}>{roleName(user.role)}</span></td><td>{user.position || user.department ? [user.position, user.department].filter(Boolean).join(" · ") : <span className="muted">—</span>}</td>
@@ -222,7 +226,7 @@ export function UsersDashboard({ currentUserId, previewMode = false, initialFilt
         <div className="modal-body"><div className="modal-subsection"><p className="modal-subsection-title">Account details</p><div className="form-grid">
           <Field label="Full name" full><input required maxLength={120} value={draft.full_name} onChange={(e) => setDraft({ ...draft, full_name: e.target.value })} placeholder="e.g. Maria Santos" /></Field>
           <Field label="Email address" full><input required type="email" value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} placeholder="name@barangay.gov.ph" /></Field>
-          {dialog.type === "create" && <div className="field full"><label htmlFor="temporary-password">Temporary password</label><div className="password-input-wrap"><input id="temporary-password" required minLength={8} type={showTemporaryPassword ? "text" : "password"} autoComplete="new-password" value={draft.password} onChange={(e) => setDraft({ ...draft, password: e.target.value })} placeholder="At least 8 characters" /><button type="button" className="password-toggle" aria-label={showTemporaryPassword ? "Hide temporary password" : "Show temporary password"} aria-pressed={showTemporaryPassword} onClick={() => setShowTemporaryPassword((shown) => !shown)}><i className={`fa-solid ${showTemporaryPassword ? "fa-eye" : "fa-eye-slash"}`} aria-hidden="true" /></button></div><span className="field-hint">Share this temporary password securely with the new account holder.</span></div>}
+          {dialog.type === "create" && <div className="field full"><label htmlFor="temporary-password">Temporary password</label><div className="password-input-wrap"><input id="temporary-password" required minLength={8} type={showTemporaryPassword ? "text" : "password"} autoComplete="new-password" value={draft.password} onChange={(e) => setDraft({ ...draft, password: e.target.value })} placeholder="At least 8 characters" /><button type="button" className="password-toggle" aria-label={showTemporaryPassword ? "Hide temporary password" : "Show temporary password"} aria-pressed={showTemporaryPassword} onClick={() => setShowTemporaryPassword((shown) => !shown)}>{showTemporaryPassword ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}</button></div><span className="field-hint">Share this temporary password securely with the new account holder.</span></div>}
         </div></div><div className="modal-subsection"><p className="modal-subsection-title">Role & organization</p><div className="form-grid">
           <Field label="Role"><select value={draft.role} onChange={(e) => { const nextRole = e.target.value as UserRole; setDraft({ ...draft, role: nextRole, position: nextRole === "official" ? draft.position : "", department: nextRole === "official" ? draft.department : "" }); }}><option value="resident">Resident</option><option value="official">Official</option><option value="admin">Admin</option></select></Field>
           {dialog.type === "edit" && <Field label="Account status"><select value={String(activeStatus)} onChange={(e) => setActiveStatus(e.target.value === "true")}><option value="true">Active</option><option value="false">Disabled</option></select></Field>}

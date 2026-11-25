@@ -39,6 +39,16 @@ async function dashboardForUser(supabase: SupabaseClient, userId: string) {
   return { ok: true as const, destination };
 }
 
+function initialHash() {
+  if (typeof window === "undefined") return "";
+  return window.location.hash === "#signin" || window.location.hash === "#signup" ? window.location.hash : "";
+}
+
+function initialNotice() {
+  if (typeof window === "undefined") return null;
+  return new URLSearchParams(window.location.search).get("notice");
+}
+
 function ShieldIcon() {
   return <svg viewBox="0 0 32 32" fill="none"><path d="M16 3 27 7.5v8.1c0 7.4-4.8 11.5-11 14.4C9.8 27.1 5 23 5 15.6V7.5L16 3Z" stroke="currentColor" strokeWidth="2.4" strokeLinejoin="round" /></svg>;
 }
@@ -68,8 +78,10 @@ function PasswordField({ id, label, value, onChange, autoComplete, show, onToggl
 export default function LoginPage() {
   const router = useRouter();
   const [checkingSession, setCheckingSession] = useState(true);
-  const [screen, setScreen] = useState<Screen>("landing");
-  const [mode, setMode] = useState<Mode>("sign-in");
+  // Read the #signin / #signup hash on first render. The first paint is the
+  // "checking session" placeholder, so this cannot cause a hydration mismatch.
+  const [screen, setScreen] = useState<Screen>(() => (initialHash() || initialNotice() ? "auth" : "landing"));
+  const [mode, setMode] = useState<Mode>(() => (initialHash() === "#signup" ? "sign-up" : "sign-in"));
   const [portal, setPortal] = useState<PortalChoice>("resident");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -83,11 +95,7 @@ export default function LoginPage() {
   // Already signed in (or refreshing while signed in)? Go straight to the right dashboard.
   useEffect(() => {
     let active = true;
-    const notice = new URLSearchParams(window.location.search).get("notice");
-    if (window.location.hash === "#signin" || window.location.hash === "#signup" || notice) {
-      setScreen("auth");
-      if (window.location.hash === "#signup") setMode("sign-up");
-    }
+    const notice = initialNotice();
 
     async function resume() {
       const supabase = createSupabaseBrowserClient();

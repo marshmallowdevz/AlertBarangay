@@ -3,11 +3,22 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, Check, ChevronDown, LoaderCircle, LogOut, Moon, Monitor, Pencil, Sun, X } from "lucide-react";
+import { Bell, Check, LoaderCircle, LogOut, Moon, Monitor, Pencil, Sun, X } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { readSavedTheme, resolveTheme, THEME_STORAGE_KEY, type Theme } from "@/lib/theme";
 
 type Notification = { id: string; event_type: string; message: string; created_at: string; read_at: string | null };
-type Theme = "system" | "light" | "dark";
+type Feed = { notifications?: Notification[]; unreadCount?: number; hasMore?: boolean };
+
+/** Returns null when offline or on an error, so the last known feed stays visible. */
+async function fetchFeed(offset: number): Promise<Feed | null> {
+  try {
+    const response = await fetch(`/api/admin/notifications?offset=${offset}`, { cache: "no-store" });
+    return response.ok ? await response.json() as Feed : null;
+  } catch {
+    return null;
+  }
+}
 
 export function AdminTopbar({ email, initialName, initialAvatarUrl }: { email: string; initialName: string; initialAvatarUrl: string }) {
   const router = useRouter();
@@ -17,34 +28,34 @@ export function AdminTopbar({ email, initialName, initialAvatarUrl }: { email: s
   const [loading, setLoading] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasMore, setHasMore] = useState(false);
-  const [theme, setTheme] = useState<Theme>("system");
+  const [theme, setTheme] = useState<Theme>(readSavedTheme);
   const avatarUrl = initialAvatarUrl;
 
-  const loadNotifications = useCallback(async (offset = 0, append = false) => {
-    try {
-      const response = await fetch(`/api/admin/notifications?offset=${offset}`, { cache: "no-store" });
-      if (!response.ok) return [] as Notification[];
-      const body = await response.json();
-      const received = (body.notifications ?? []) as Notification[];
-      setNotifications((current) => append ? [...current.filter((item) => !received.some((newItem) => newItem.id === item.id)), ...received] : received);
-      setUnreadCount(body.unreadCount ?? 0);
-      setHasMore(Boolean(body.hasMore));
-      return received;
-    } catch { return [] as Notification[]; /* Keep the last known feed visible while offline. */ }
+  const applyFeed = useCallback((feed: Feed, append: boolean) => {
+    const received = feed.notifications ?? [];
+    setNotifications((current) => append ? [...current.filter((item) => !received.some((newItem) => newItem.id === item.id)), ...received] : received);
+    setUnreadCount(feed.unreadCount ?? 0);
+    setHasMore(Boolean(feed.hasMore));
+    return received;
   }, []);
 
+  const loadNotifications = useCallback(async (offset = 0, append = false) => {
+    const feed = await fetchFeed(offset);
+    return feed ? applyFeed(feed, append) : [];
+  }, [applyFeed]);
+
   useEffect(() => {
-    const saved = localStorage.getItem("alertbarangay-theme") as Theme | null;
-    if (saved === "system" || saved === "light" || saved === "dark") setTheme(saved);
     const client = createSupabaseBrowserClient();
-    const channel = client.channel("admin-notification-feed").on("postgres_changes", { event: "*", schema: "public", table: "admin_notifications" }, () => { void loadNotifications(); }).subscribe();
-    void loadNotifications();
-    return () => { void client.removeChannel(channel); };
-  }, [loadNotifications]);
+    let active = true;
+    const refresh = () => { void fetchFeed(0).then((feed) => { if (active && feed) applyFeed(feed, false); }); };
+    const channel = client.channel("admin-notification-feed").on("postgres_changes", { event: "*", schema: "public", table: "admin_notifications" }, refresh).subscribe();
+    refresh();
+    return () => { active = false; void client.removeChannel(channel); };
+  }, [applyFeed]);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const apply = () => document.documentElement.dataset.theme = theme === "system" ? (media.matches ? "dark" : "light") : theme;
+    const apply = () => { document.documentElement.dataset.theme = resolveTheme(theme, media.matches); };
     apply();
     media.addEventListener("change", apply);
     return () => media.removeEventListener("change", apply);
@@ -52,7 +63,7 @@ export function AdminTopbar({ email, initialName, initialAvatarUrl }: { email: s
 
   function chooseTheme(value: Theme) {
     setTheme(value);
-    localStorage.setItem("alertbarangay-theme", value);
+    try { localStorage.setItem(THEME_STORAGE_KEY, value); } catch { /* storage disabled */ }
     setMenu(null);
   }
 
@@ -97,7 +108,7 @@ export function AdminTopbar({ email, initialName, initialAvatarUrl }: { email: s
         </button>
         {menu === "appearance" && <div className="topbar-popover appearance-popover" role="menu" aria-label="Appearance">
           {(["system", "light", "dark"] as const).map((value) => <button type="button" role="menuitemradio" aria-checked={theme === value} className={`appearance-option ${theme === value ? "selected" : ""}`} key={value} onClick={() => chooseTheme(value)}>
-            {value === "system" ? <Sun size={15} /> : value === "light" ? <Sun size={15} /> : <Moon size={15} />}<span>{value === "system" ? "Use system" : value === "light" ? "Light mode" : "Dark mode"}</span>{theme === value && <Check size={14} />}
+            {value === "system" ? <Monitor size={15} /> : value === "light" ? <Sun size={15} /> : <Moon size={15} />}<span>{value === "system" ? "Use system" : value === "light" ? "Light mode" : "Dark mode"}</span>{theme === value && <Check size={14} />}
           </button>)}
         </div>}
       </div>

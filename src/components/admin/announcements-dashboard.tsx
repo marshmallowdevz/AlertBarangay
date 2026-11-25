@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { errorMessage, fetchJson } from "@/lib/fetch-json";
 import { Bell, CircleAlert, Edit3, Plus, Send, Trash2, X } from "lucide-react";
 
 type Announcement = { id: string; title: string; body: string; is_published: boolean; created_at: string; updated_at: string; published_at: string | null };
 type Draft = { title: string; body: string; is_published: boolean };
 const emptyDraft: Draft = { title: "", body: "", is_published: false };
+const fetchAnnouncements = () => fetchJson<{ announcements?: Announcement[] }>("/api/admin/announcements");
 
 export function AnnouncementsDashboard() {
   const [items, setItems] = useState<Announcement[]>([]);
@@ -19,15 +21,19 @@ export function AnnouncementsDashboard() {
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
-    try {
-      const response = await fetch("/api/admin/announcements", { cache: "no-store" });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Unable to load announcements.");
-      setItems(result.announcements ?? []);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to load announcements."); }
+    try { setItems((await fetchAnnouncements()).announcements ?? []); }
+    catch (cause) { setError(errorMessage(cause, "Unable to load announcements.")); }
     finally { setLoading(false); }
   }, []);
-  useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    let active = true;
+    fetchAnnouncements()
+      .then((result) => { if (active) setItems(result.announcements ?? []); })
+      .catch((cause) => { if (active) setError(errorMessage(cause, "Unable to load announcements.")); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
 
   function openCreate() { setEditing(null); setDraft(emptyDraft); setError(""); setFormOpen(true); }
   function openEdit(item: Announcement) { setEditing(item); setDraft({ title: item.title, body: item.body, is_published: item.is_published }); setError(""); setFormOpen(true); }

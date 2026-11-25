@@ -2,7 +2,6 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { jsonError } from "@/lib/http";
 import { adminAccessResponse, requireAdmin } from "@/lib/supabase/guard";
 
-const defaultMessage = "AlertBarangay is currently undergoing scheduled maintenance. Please check back shortly.";
 
 export async function GET() {
   const access = await requireAdmin();
