@@ -15,8 +15,8 @@ import { getCommunityFileMediaType, getCommunityPostMediaKind, removeCommunityMe
 import MediaSourceChooser from "./MediaSourceChooser";
 import ReelsMapView from "./ReelsMapView";
 
-const HOTLINE = "0932 537 7770";
-const HOTLINE_TEL = "tel:+639325377770";
+const HOTLINE = "0918-921-0000";
+const HOTLINE_TEL = "tel:+639189210000";
 
 const EMERGENCY_TYPES = [
   { key: "Fire", incidentType: "fire", icon: Flame, color: "#c0392b" },
@@ -50,10 +50,10 @@ const SAFETY_TIPS = [
 ];
 
 const CONTACTS = [
-  { name: "Philippine Red Cross", number: "143", tel: "tel:143" },
-  { name: "Cebu City Fire", number: "160", tel: "tel:160" },
-  { name: "Cebu City Police", number: "166", tel: "tel:166" },
-  { name: "CCDRRMO Rescue Hotline", number: HOTLINE, tel: HOTLINE_TEL },
+  { name: "Philippine Red Cross Cebu", number: "0915-583-9829", tel: "tel:+639155839829" },
+  { name: "Fire Station (Labangon)", number: "(032) 261-0911", tel: "tel:+63322610911" },
+  { name: "Police Station (Labangon)", number: "0998 598 6292", tel: "tel:+639985986292" },
+  { name: "Rescue Unit", number: HOTLINE, tel: HOTLINE_TEL },
   { name: "Cebu City Hall", number: "(032) 411-0100", tel: "tel:+63324110100" },
   { name: "Visayan Electric", number: "(032) 230-8326", tel: "tel:+63322308326" },
   { name: "CCDRRMO Mambaling", number: "(032) 262-1424", tel: "tel:+63322621424" },
