@@ -17,21 +17,9 @@ export async function resolveAppRole(
   userId: string,
   accessToken?: string,
 ): Promise<AppRoleResolution> {
-  let claimRole: unknown;
-  try {
-    const { data, error } = accessToken
-      ? await supabase.auth.getClaims(accessToken)
-      : await supabase.auth.getClaims();
-    if (!error) claimRole = data?.claims?.user_role;
-  } catch {
-    // Fall back to the RLS-protected own-profile query below.
-  }
-
-  if (isAppRole(claimRole)) {
-    const destination = getRoleDashboardPath(claimRole);
-    if (destination) return { ok: true, role: claimRole, destination };
-  }
-
+  // Always read the profile so a disabled account (is_active = false) is
+  // refused even while its access token is still valid.
+  void accessToken;
   let profile: { role: unknown; is_active: boolean } | null;
   try {
     const result = await supabase
@@ -48,7 +36,6 @@ export async function resolveAppRole(
   if (!profile.is_active) return { ok: false, reason: "inactive" };
   if (!isAppRole(profile.role)) return { ok: false, reason: "unrecognized" };
 
-  // A missing or unrecognized JWT role falls back to the user's own profile.
   const role = profile.role;
   const destination = getRoleDashboardPath(role);
   return destination

@@ -3,7 +3,25 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getRequiredRole } from "@/lib/auth/roles";
 import { resolveAppRole } from "@/lib/auth/resolve-app-role";
 
+const safeMethods = new Set(["GET", "HEAD", "OPTIONS"]);
+
+// Blocks cross-site form posts or scripts from calling our API with the
+// visitor's session cookie (CSRF). Browsers always send Origin on these.
+function isCrossSiteWrite(request: NextRequest) {
+  if (safeMethods.has(request.method) || !request.nextUrl.pathname.startsWith("/api/")) return false;
+  const origin = request.headers.get("origin");
+  if (!origin) return true;
+  try {
+    return new URL(origin).host !== (request.headers.get("x-forwarded-host") ?? request.headers.get("host"));
+  } catch {
+    return true;
+  }
+}
+
 export async function proxy(request: NextRequest) {
+  if (isCrossSiteWrite(request)) {
+    return Response.json({ error: "Cross-site request blocked." }, { status: 403 });
+  }
   let response = NextResponse.next({ request });
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

@@ -59,7 +59,10 @@ export async function POST(request: Request) {
     admin = createSupabaseAdminClient();
     const { data, error } = await admin.auth.admin.createUser({
       email, password, email_confirm: true,
-      user_metadata: { full_name, role, position, department, admin_managed: true },
+      // user_metadata is editable by the user, so it never carries the role.
+      // app_metadata can only be set by the server.
+      user_metadata: { full_name, position, department },
+      app_metadata: { admin_managed: true },
     });
     if (error) throw error;
     createdUserId = data.user.id;

@@ -1,11 +1,12 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { jsonError } from "@/lib/http";
+import { isUuid, jsonError } from "@/lib/http";
 import { adminAccessResponse, requireAdmin } from "@/lib/supabase/guard";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const access = await requireAdmin();
   if (!access.ok) return adminAccessResponse(access);
   const { id } = await params;
+  if (!isUuid(id)) return jsonError("Invalid user ID.", 400);
   try {
     const body = await request.json();
     if (typeof body.password !== "string" || body.password.length < 12 || body.password !== body.confirmPassword) {

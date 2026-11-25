@@ -58,52 +58,18 @@ export async function requireAdmin() {
     });
   }
 
-  let functionIsAdmin: boolean | null = null;
-  let functionCheckFailed = false;
-  try {
-    const { data, error } = await supabase.rpc("is_admin");
-    if (error) {
-      functionCheckFailed = true;
-      console.error("[admin-auth] public.is_admin() failed", {
-        userId: user.id,
-        code: error.code,
-        message: error.message,
-      });
-    } else {
-      functionIsAdmin = data === true;
-    }
-  } catch (error) {
-    functionCheckFailed = true;
-    console.error("[admin-auth] public.is_admin() could not run", {
-      userId: user.id,
-      message: error instanceof Error ? error.message : "unknown error",
-    });
-  }
-
-  if (profile?.is_active === false) {
-    console.warn("[admin-auth] request denied: inactive profile", { userId: user.id });
-    return { ok: false as const, status: 403, reason: "not_admin" as const };
-  }
-
-  const profileIsAdmin = profile?.role === "admin" && profile.is_active;
-  if (profile && profileIsAdmin) {
-    return { ok: true as const, actor: user };
-  }
-
-  if (!profile && functionIsAdmin === true) {
-    console.warn("[admin-auth] accepted via public.is_admin(); profile lookup was unavailable", { userId: user.id });
-    return { ok: true as const, actor: user };
-  }
-
-  if (!profile && profileReadFailed && functionCheckFailed) {
+  if (profileReadFailed) {
     return { ok: false as const, status: 500, reason: "verification_failed" as const };
+  }
+
+  if (profile?.role === "admin" && profile.is_active) {
+    return { ok: true as const, actor: user };
   }
 
   console.warn("[admin-auth] request denied: role check did not confirm admin", {
     userId: user.id,
     profileRole: profile?.role ?? null,
     profileActive: profile?.is_active ?? null,
-    isAdminFunctionResult: functionIsAdmin,
   });
   return { ok: false as const, status: 403, reason: "not_admin" as const };
 }

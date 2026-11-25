@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { LogOut, ShieldCheck } from "lucide-react";
 import type { AppRole } from "@/lib/auth/roles";
@@ -12,7 +12,7 @@ const roleLabels: Record<AppRole, string> = {
   resident: "Resident",
 };
 
-export function RoleDashboard({ role }: { role: Exclude<AppRole, "admin"> }) {
+export function RoleDashboard({ role, fullName, children }: { role: Exclude<AppRole, "admin">; fullName: string; children: ReactNode }) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [signingOut, setSigningOut] = useState(false);
@@ -42,12 +42,17 @@ export function RoleDashboard({ role }: { role: Exclude<AppRole, "admin"> }) {
           <LogOut size={15} />{signingOut ? "Signing out…" : "Sign out"}
         </button>
       </div>
-      <section className="overview-card" aria-label={`${roleLabels[role]} dashboard`}>
-        <div className="eyebrow">{roleLabels[role].toUpperCase()} DASHBOARD</div>
-        <h1 className="section-title">Welcome to AlertBarangay</h1>
-        <p className="subtitle">You are signed in as a {roleLabels[role].toLowerCase()}.</p>
-      </section>
-      {error && <div className="inline-error" role="alert">{error}</div>}
+      {error && <div className="inline-error" role="alert" style={{ marginBottom: 16 }}>{error}</div>}
+      <div className="page-heading">
+        <div>
+          <div className="eyebrow">{roleLabels[role].toUpperCase()} DASHBOARD</div>
+          <h1>{fullName ? `Welcome, ${fullName.split(" ")[0]}` : "Welcome to AlertBarangay"}</h1>
+          <p className="subtitle">{role === "resident"
+            ? "Report an emergency, follow your reports and read barangay announcements."
+            : "Review incoming incidents and update their response status."}</p>
+        </div>
+      </div>
+      {children}
     </div>
   </main>;
 }

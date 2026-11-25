@@ -1,15 +1,24 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { jsonError } from "@/lib/http";
+import { isUuid, jsonError } from "@/lib/http";
 import { adminAccessResponse, requireAdmin } from "@/lib/supabase/guard";
 import type { UserRole } from "@/types/user";
 
 type RouteContext = { params: Promise<{ id: string }> };
 const roles: UserRole[] = ["admin", "official", "resident"];
 
+// Older accounts stored the role in user-editable metadata; drop it so nothing
+// mistakes it for the real role in public.profiles.
+function withoutRole(metadata: Record<string, unknown> | undefined) {
+  const { role: _role, admin_managed: _adminManaged, ...rest } = metadata ?? {};
+  void _role; void _adminManaged;
+  return rest;
+}
+
 export async function PATCH(request: Request, { params }: RouteContext) {
   const access = await requireAdmin();
   if (!access.ok) return adminAccessResponse(access);
   const { id } = await params;
+  if (!isUuid(id)) return jsonError("Invalid user ID.", 400);
   try {
     const body = await request.json();
     const full_name = typeof body.full_name === "string" ? body.full_name.trim() : "";
@@ -45,7 +54,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     const { error: authError } = await admin.auth.admin.updateUserById(id, {
       email,
       email_confirm: Boolean(target.user.email_confirmed_at),
-      user_metadata: { ...target.user.user_metadata, full_name, role, position: profile.position, department: profile.department },
+      user_metadata: { ...withoutRole(target.user.user_metadata), full_name, position: profile.position, department: profile.department },
       ban_duration: body.is_active ? "none" : "876000h",
     });
     if (authError) throw authError;
@@ -86,6 +95,7 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
   const access = await requireAdmin();
   if (!access.ok) return adminAccessResponse(access);
   const { id } = await params;
+  if (!isUuid(id)) return jsonError("Invalid user ID.", 400);
   if (id === access.actor.id) return jsonError("You cannot delete your own administrator account.", 400);
 
   try {

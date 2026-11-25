@@ -21,7 +21,15 @@ A standalone Next.js App Router module for administrators to create, edit, disab
 
    `SUPABASE_SECRET_KEY` is preferred; `SUPABASE_SERVICE_ROLE_KEY` is supported as a fallback. The privileged key is read only by server-only modules and must never use a `NEXT_PUBLIC_` prefix. Do not commit `.env.local`.
 
-3. In the Supabase SQL Editor, run [`supabase/migrations/202611230001_admin_user_management.sql`](supabase/migrations/202611230001_admin_user_management.sql), then [`supabase/migrations/202611250001_profiles_self_read_policy.sql`](supabase/migrations/202611250001_profiles_self_read_policy.sql), [`supabase/migrations/202611250002_admin_announcements_notifications.sql`](supabase/migrations/202611250002_admin_announcements_notifications.sql), [`supabase/migrations/202611250003_profile_photos.sql`](supabase/migrations/202611250003_profile_photos.sql), and [`supabase/migrations/202611250004_maintenance_mode.sql`](supabase/migrations/202611250004_maintenance_mode.sql).
+3. In the Supabase SQL Editor, run these migrations in order (all are safe to re-run):
+   1. [`202611150001_incidents.sql`](supabase/migrations/202611150001_incidents.sql) (resident reports and the official incident list; needs the PostGIS, pg_cron and pg_net extensions)
+   2. [`202611230001_admin_user_management.sql`](supabase/migrations/202611230001_admin_user_management.sql)
+   3. [`202611250001_profiles_self_read_policy.sql`](supabase/migrations/202611250001_profiles_self_read_policy.sql)
+   4. [`202611250002_admin_announcements_notifications.sql`](supabase/migrations/202611250002_admin_announcements_notifications.sql)
+   5. [`202611250003_profile_photos.sql`](supabase/migrations/202611250003_profile_photos.sql)
+   6. [`202611250004_maintenance_mode.sql`](supabase/migrations/202611250004_maintenance_mode.sql)
+   7. [`202611250005_security_hardening.sql`](supabase/migrations/202611250005_security_hardening.sql): blocks role changes from the browser, lets officials update incidents, makes incident photos private to the reporter and staff
+   8. [`202611250006_lock_down_legacy_dashboard_tables.sql`](supabase/migrations/202611250006_lock_down_legacy_dashboard_tables.sql), only if the old official-dashboard migrations were ever applied to this project. It removes their "anyone can read/write" rules.
 4. Create the first user under **Authentication → Users** in Supabase, or use the Auth Admin API. Then promote that user's UUID in the SQL Editor:
 
    ```sql
@@ -40,7 +48,8 @@ A standalone Next.js App Router module for administrators to create, edit, disab
 - New-account temporary passwords must be at least 8 characters. Admin password resets require matching passwords of at least 12 characters and are audited without storing the password.
 - Disabling an account marks its profile inactive and applies a long Auth ban. Re-enabling clears that ban. All connected dashboards must also check `profiles.is_active` and the profile role during authorization.
 - Deleting an account removes the Auth user and cascades deletion of the profile. Audit rows intentionally retain actor and target UUIDs without Auth foreign keys.
-- This app only exposes user management. Announcements/settings entries in the sidebar are visual placeholders for integration with the official dashboard.
+- Sign-in sends each role to its own page: admins to `/admin`, officials to `/dashboard` (live incident list with status updates), residents to `/resident` (report an emergency with GPS location and an optional photo/video, follow report status live, read announcements).
+- Role routing and maintenance mode run in `src/proxy.ts`. With a `src/` folder, Next.js only picks up the proxy from inside `src/`.
 
 ## Security and RLS
 
