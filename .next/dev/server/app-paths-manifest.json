@@ -1,4 +1,13 @@
 {
+  "/account/page": "app/account/page.js",
+  "/admin/announcements/page": "app/admin/announcements/page.js",
+  "/admin/page": "app/admin/page.js",
   "/admin/users/page": "app/admin/users/page.js",
-  "/page": "app/page.js"
+  "/api/admin/announcements/route": "app/api/admin/announcements/route.js",
+  "/api/admin/notifications/route": "app/api/admin/notifications/route.js",
+  "/api/admin/users/route": "app/api/admin/users/route.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/login/page": "app/login/page.js",
+  "/page": "app/page.js",
+  "/resident/page": "app/resident/page.js"
 }

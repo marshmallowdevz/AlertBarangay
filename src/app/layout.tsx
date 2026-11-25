@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import { themeBootScript } from "@/lib/theme";
 import "./globals.css";
 
@@ -15,11 +16,16 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en" suppressHydrationWarning>
-    <head>
-      {/* Applies the saved light/dark theme before first paint. */}
-      <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
-    </head>
-    <body>{children}</body>
-  </html>;
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <body>
+        <Script
+          id="theme-boot"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{ __html: themeBootScript }}
+        />
+        {children}
+      </body>
+    </html>
+  );
 }

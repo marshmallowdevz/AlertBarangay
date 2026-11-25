@@ -243,7 +243,7 @@ export default function LoginPage() {
         <form onSubmit={(event) => void submit(event)} noValidate>
           {mode === "sign-in" && <fieldset className="roles">
             <legend>I am signing in as</legend>
-            <label><input type="radio" name="role" value="resident" checked={portal === "resident"} onChange={() => setPortal("resident")} /><span className="chip">Resident</span></label>
+            <label><input type="radio" name="role" value="resident" checked={portal === "resident"} onChange={() => setPortal("resident")} /><span className="chip">Admin</span></label>
             <label><input type="radio" name="role" value="official" checked={portal === "official"} onChange={() => setPortal("official")} /><span className="chip">Barangay Official</span></label>
           </fieldset>}
 
