@@ -12,8 +12,10 @@ export type Incident = {
   eid: string;
   type: IncidentType;
   description: string;
-  lat: number;
-  lng: number;
+  lat: number | null;
+  lng: number | null;
+  /** Typed address or landmark (migration 0007). Missing on older databases. */
+  location_text?: string | null;
   status: IncidentStatus;
   media_path: string | null;
   media_type: "image" | "video" | null;
@@ -22,7 +24,8 @@ export type Incident = {
   updated_at: string;
 };
 
-export const incidentColumns = "id,eid,type,description,lat,lng,status,media_path,media_type,reporter_id,created_at,updated_at";
+// "*" keeps working whether or not the optional location_text column (migration 0007) exists yet.
+export const incidentColumns = "*";
 
 export const typeLabels: Record<IncidentType, string> = {
   fire: "Fire",
@@ -40,6 +43,7 @@ export const statusLabels: Record<IncidentStatus, string> = {
 };
 
 export const MAX_DESCRIPTION = 300;
+export const MAX_LOCATION_TEXT = 200;
 const MB = 1024 * 1024;
 // Same limits as the incident-media storage policy.
 export const MAX_IMAGE_BYTES = 5 * MB;
@@ -71,8 +75,27 @@ export async function signedMediaUrl(supabase: SupabaseClient, path: string) {
   return data.signedUrl;
 }
 
-export function mapLink(lat: number, lng: number) {
-  return `https://www.google.com/maps?q=${lat},${lng}`;
+export function mapLink(incident: { lat: number | null; lng: number | null; location_text?: string | null }) {
+  if (incident.lat != null && incident.lng != null) return `https://www.google.com/maps?q=${incident.lat},${incident.lng}`;
+  if (incident.location_text) return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(incident.location_text)}`;
+  return null;
+}
+
+/** Short human description of where an incident is. */
+export function describeLocation(incident: { lat: number | null; lng: number | null; location_text?: string | null }) {
+  if (incident.location_text) return incident.location_text;
+  if (incident.lat != null && incident.lng != null) return `GPS ${incident.lat.toFixed(5)}, ${incident.lng.toFixed(5)}`;
+  return "No location given";
+}
+
+/** "5 min ago", "2 h ago", or a date for older items. */
+export function timeAgo(iso: string, now = Date.now()) {
+  const minutes = Math.round((now - new Date(iso).getTime()) / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  return formatDate(iso);
 }
 
 export function formatDate(iso: string) {

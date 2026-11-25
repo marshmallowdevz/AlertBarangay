@@ -1,5 +1,8 @@
-import { ProfileSettings } from "@/components/admin/profile-settings";
+import type { Metadata } from "next";
+import { ProfileSettings } from "@/components/account/profile-settings";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+export const metadata: Metadata = { title: "Your profile" };
 
 export default async function AdminProfilePage() {
   const supabase = await createSupabaseServerClient();

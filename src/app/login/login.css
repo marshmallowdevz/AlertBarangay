@@ -172,3 +172,10 @@
 .ab-login .chip { cursor: pointer; }
 .ab-login .roles label:hover .chip { border-color: #e0b5c2; }
 .ab-login .submit:disabled { opacity: .65; cursor: wait; transform: none; }
+.ab-login .forgot-link { display: block; margin: -4px 4px 0 auto; padding: 4px 2px; border: 0; background: transparent; color: #e7c5cf; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.ab-login .forgot-link:hover { color: #fff; }
+.ab-login .forgot-link:focus-visible { outline: 3px solid #e0b5c2; outline-offset: 2px; border-radius: 6px; }
+.ab-login[data-auth-mode="reset"] .roles { display: none; }
+.ab-login.reset-page { display: grid; place-items: center; grid-template-columns: 1fr; background: var(--bg); }
+.ab-login.reset-page > .sign-in-panel { padding-bottom: 32px; }
+.ab-login a.submit { text-decoration: none; }

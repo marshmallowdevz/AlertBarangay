@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { UsersDashboard } from "@/components/admin/users-dashboard";
 import { resolveAppRole } from "@/lib/auth/resolve-app-role";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+export const metadata: Metadata = { title: "User management" };
 
 type UsersPageProps = { searchParams: Promise<{ role?: string; status?: string; group?: string }> };
 

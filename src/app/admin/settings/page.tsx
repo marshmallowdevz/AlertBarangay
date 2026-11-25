@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { SettingsPage } from "@/components/admin/settings-page";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+
+export const metadata: Metadata = { title: "Settings" };
 
 export default async function AdminSettingsPage() {
   const supabase = await createSupabaseServerClient();

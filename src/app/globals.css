@@ -242,3 +242,73 @@ html[data-theme="dark"] .danger-ghost{background:transparent;border-color:#61413
 .field textarea{font-size:12px}
 @media(max-width:900px){.role-grid,.role-grid.official{grid-template-columns:1fr}}
 @media(max-width:720px){.type-picker{grid-template-columns:repeat(2,1fr)}.metrics-grid.three{grid-template-columns:repeat(3,1fr)}}
+
+/* ---------- Resident / official shell ---------- */
+.role-shell{min-height:100vh;background:var(--canvas)}
+.role-header{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px clamp(16px,4vw,48px);background:var(--maroon);color:#fff;box-shadow:0 2px 10px #2a0a1226}
+.role-brand{padding:0;color:#fff}
+.role-brand small{color:#e0c7ca}
+.role-nav{display:flex;align-items:center;gap:6px}
+.role-nav a,.role-nav button{display:inline-flex;align-items:center;gap:7px;min-height:38px;padding:0 12px;border:1px solid transparent;border-radius:9px;background:transparent;color:#f7edef;font-size:12px;font-weight:600}
+.role-nav a:hover,.role-nav button:hover{background:#ffffff14;border-color:#ffffff1f}
+.role-nav a.active{background:#ffffff1f;border-color:#ffffff2e;color:#fff}
+.role-nav a:focus-visible,.role-nav button:focus-visible{outline:3px solid var(--cream);outline-offset:2px}
+.role-nav button:disabled{opacity:.6;cursor:wait}
+.role-main{padding:32px clamp(16px,4vw,48px) 56px}
+.hotline-banner{display:flex;align-items:center;gap:12px;margin:0 0 20px;padding:12px 16px;border:1px solid #f0d1ca;border-radius:12px;background:#fff1ef;color:#7d2d24;font-size:12px}
+.hotline-banner:hover{background:#ffe7e3}
+.hotline-icon{width:34px;height:34px;flex:none;border-radius:50%;background:var(--red);color:#fff;display:grid;place-items:center}
+.hotline-cta{margin-left:auto;flex:none;padding:8px 12px;border-radius:8px;background:var(--red);color:#fff;font-weight:700}
+.type-option{flex-direction:column;gap:5px;min-height:64px}
+.type-option svg{flex:none}
+.field-label{font-size:10px;font-weight:700;color:#62574c}
+.text-input{width:100%;height:38px;border:1px solid var(--border);border-radius:8px;padding:0 10px;font-size:12px;outline:none;background:#fff;color:var(--ink)}
+.text-input:focus{border-color:#a87981;box-shadow:0 0 0 3px #4a101e12}
+.file-chip{display:flex;align-items:center;gap:8px;padding:8px 11px;border:1px solid var(--border);border-radius:8px;background:var(--ivory);font-size:12px}
+.file-chip span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.submit-report{min-height:46px;font-size:13px}
+.empty-inline{display:flex;align-items:center;gap:10px;padding:14px;border:1px dashed var(--border);border-radius:10px;color:var(--muted)}
+.empty-inline p{margin:0;font-size:12px}
+.incident-item.attention{border-color:#f0d1ca;background:#fff8f6}
+.incident-item-top strong{display:inline-flex;align-items:center;gap:6px}
+.incident-meta{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:10px;color:var(--muted)}
+.incident-meta span{display:inline-flex;align-items:center;gap:4px}
+.incident-meta a{text-decoration:underline}
+.status-track{list-style:none;display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin:2px 0 0;padding:0}
+.status-track li{padding-top:7px;border-top:3px solid var(--border);font-size:9px;font-weight:700;color:#a39a90;text-transform:uppercase;letter-spacing:.4px}
+.status-track li.done{border-top-color:var(--maroon);color:var(--maroon)}
+.metric-button{text-align:left;cursor:pointer;font:inherit;color:inherit;transition:border-color .16s,transform .16s}
+.metric-button:hover{transform:translateY(-1px);border-color:#d9c9b8}
+.metric-button.active{border-color:var(--maroon);box-shadow:0 0 0 2px #4a101e1a}
+.metric-button:focus-visible{outline:3px solid #a87981;outline-offset:2px}
+.role-panel .filters{flex-wrap:wrap}
+.status-page{min-height:100vh;display:grid;place-items:center;padding:24px;background:var(--canvas)}
+.status-card{width:min(440px,100%);padding:32px;border:1px solid var(--border);border-radius:16px;background:var(--card);text-align:center;box-shadow:var(--shadow)}
+.status-card h1{font:800 22px Manrope,sans-serif;margin:14px 0 8px}
+.status-card p{margin:0;color:var(--muted);font-size:13px;line-height:1.6}
+.status-card small{display:block;margin-top:10px;color:var(--muted);font-size:10px}
+.status-icon{width:46px;height:46px;margin:0 auto;border-radius:13px;background:var(--ivory);color:var(--maroon);display:grid;place-items:center}
+.status-actions{display:flex;justify-content:center;gap:8px;margin-top:20px}
+@media(max-width:640px){
+  .role-header{flex-wrap:wrap;padding:10px 14px}
+  .role-nav{width:100%;justify-content:space-between}
+  .role-nav a,.role-nav button{flex:1;justify-content:center;padding:0 6px}
+  .role-main{padding:20px 14px 40px}
+  .hotline-banner{flex-wrap:wrap}
+  .hotline-cta{margin-left:0;width:100%;text-align:center}
+}
+
+/* Dark mode for the resident / official pages */
+html[data-theme="dark"] .role-shell,html[data-theme="dark"] .status-page{background:#1b1719}
+html[data-theme="dark"] .role-header{background:#2a1118}
+html[data-theme="dark"] .incident-item,html[data-theme="dark"] .file-chip,html[data-theme="dark"] .feed-icon,html[data-theme="dark"] .status-icon{background:#2a2427;border-color:#3b3438;color:#eadfe2}
+html[data-theme="dark"] .incident-item p,html[data-theme="dark"] .feed-item p,html[data-theme="dark"] .incident-item-top,html[data-theme="dark"] .feed-item strong{color:#eadfe2}
+html[data-theme="dark"] .incident-item.attention{background:#33201f;border-color:#5a3330}
+html[data-theme="dark"] .type-option,html[data-theme="dark"] .text-input,html[data-theme="dark"] .incident-form textarea{background:#231e21;border-color:#3b3438;color:#eadfe2}
+html[data-theme="dark"] .type-option.selected{background:#7a2a3d;border-color:#7a2a3d;color:#fff}
+html[data-theme="dark"] .status-track li{border-top-color:#3b3438;color:#8f858d}
+html[data-theme="dark"] .status-track li.done{border-top-color:#d28da3;color:#d28da3}
+html[data-theme="dark"] .hotline-banner{background:#3a1a1a;border-color:#5a2a2a;color:#ffd6d2}
+html[data-theme="dark"] .empty-inline{border-color:#3b3438}
+html[data-theme="dark"] .status-card{background:#252326;border-color:#3b3437}
+html[data-theme="dark"] .location-chip,html[data-theme="dark"] .success-note{background:#1f3328;color:#bfe3cc}

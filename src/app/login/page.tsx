@@ -2,13 +2,12 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { getRoleDashboardPath } from "@/lib/auth/roles";
+import { dashboardForUser } from "@/lib/auth/dashboard-for-user";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import "./login.css";
 
 type Screen = "landing" | "auth";
-type Mode = "sign-in" | "sign-up";
+type Mode = "sign-in" | "sign-up" | "reset";
 // Admin is intentionally not offered: admins pick either chip and are still
 // routed to the admin dashboard, because routing uses profiles.role only.
 type PortalChoice = "resident" | "official";
@@ -23,25 +22,9 @@ const noticeMessages: Record<string, string> = {
   role: "Your account doesn't have an active role yet. Contact your barangay administrator.",
 };
 
-/**
- * Looks up the signed-in user's real role in public.profiles and returns the
- * dashboard path for it. The chip the user tapped on the form is ignored.
- */
-async function dashboardForUser(supabase: SupabaseClient, userId: string) {
-  const { data: profile, error } = await supabase
-    .from("profiles")
-    .select("id, role")
-    .eq("id", userId)
-    .maybeSingle();
-  if (error) return { ok: false as const, message: "We couldn't read your account role. Please try again in a moment." };
-  const destination = getRoleDashboardPath(profile?.role);
-  if (!destination) return { ok: false as const, message: "This account has no role yet. Contact your barangay administrator." };
-  return { ok: true as const, destination };
-}
-
 function initialHash() {
   if (typeof window === "undefined") return "";
-  return window.location.hash === "#signin" || window.location.hash === "#signup" ? window.location.hash : "";
+  return ["#signin", "#signup", "#reset"].includes(window.location.hash) ? window.location.hash : "";
 }
 
 function initialNotice() {
@@ -81,7 +64,7 @@ export default function LoginPage() {
   // Read the #signin / #signup hash on first render. The first paint is the
   // "checking session" placeholder, so this cannot cause a hydration mismatch.
   const [screen, setScreen] = useState<Screen>(() => (initialHash() || initialNotice() ? "auth" : "landing"));
-  const [mode, setMode] = useState<Mode>(() => (initialHash() === "#signup" ? "sign-up" : "sign-in"));
+  const [mode, setMode] = useState<Mode>(() => (initialHash() === "#signup" ? "sign-up" : initialHash() === "#reset" ? "reset" : "sign-in"));
   const [portal, setPortal] = useState<PortalChoice>("resident");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -122,9 +105,22 @@ export default function LoginPage() {
     return () => { active = false; };
   }, [router]);
 
+  // Follow #signin / #signup / #reset links clicked while already on this page.
+  useEffect(() => {
+    const onHashChange = () => {
+      const hash = initialHash();
+      if (!hash) return;
+      setScreen("auth");
+      setMode(hash === "#signup" ? "sign-up" : hash === "#reset" ? "reset" : "sign-in");
+      setMessage(null);
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
   function openAuth(nextMode: Mode) {
     setMode(nextMode); setScreen("auth"); setMessage(null);
-    window.history.replaceState(null, "", nextMode === "sign-up" ? "#signup" : "#signin");
+    window.history.replaceState(null, "", nextMode === "sign-up" ? "#signup" : nextMode === "reset" ? "#reset" : "#signin");
   }
 
   function backToLanding() {
@@ -134,6 +130,7 @@ export default function LoginPage() {
 
   function toggleMode() {
     openAuth(mode === "sign-in" ? "sign-up" : "sign-in");
+    setPassword("");
     setConfirm(""); setShowConfirm(false);
   }
 
@@ -141,11 +138,20 @@ export default function LoginPage() {
     event.preventDefault();
     setMessage(null);
     const cleanEmail = email.trim();
-    if (!cleanEmail || !password) { setMessage({ kind: "error", text: "Please enter your email and password." }); return; }
+    if (mode === "reset") {
+      if (!cleanEmail) { setMessage({ kind: "error", text: "Enter the email address of your account." }); return; }
+    } else if (!cleanEmail || !password) { setMessage({ kind: "error", text: "Please enter your email and password." }); return; }
 
     const supabase = createSupabaseBrowserClient();
     setBusy(true);
     try {
+      if (mode === "reset") {
+        const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, { redirectTo: `${window.location.origin}/auth/reset` });
+        // Same message either way, so this form cannot be used to discover which emails have accounts.
+        if (error && error.status === 0) { setMessage({ kind: "error", text: "We couldn't reach the sign-in service. Check your connection." }); return; }
+        setMessage({ kind: "success", text: "If an account exists for that email, a reset link is on its way. Open it on this device." });
+        return;
+      }
       if (mode === "sign-up") {
         if (fullName.trim().length < 2) { setMessage({ kind: "error", text: "Please enter your full name." }); return; }
         if (password.length < 8) { setMessage({ kind: "error", text: "Use a password with at least 8 characters." }); return; }
@@ -194,7 +200,13 @@ export default function LoginPage() {
   }
 
   const signingUp = mode === "sign-up";
+  const resetting = mode === "reset";
   const copy = portalCopy[portal];
+  const heading = signingUp ? "Create Your Account" : resetting ? "Reset your password" : "Hello Welcome Back!";
+  const eyebrow = signingUp ? "Create your account" : resetting ? "Forgot password" : copy.eyebrow;
+  const intro = signingUp
+    ? "Sign-ups are for residents. Barangay official accounts are created by an administrator."
+    : resetting ? "Enter your email and we'll send you a link to choose a new password." : copy.intro;
 
   return <main className={`ab-login ${screen === "auth" ? "is-auth" : "is-landing"}`} data-auth-mode={screen === "auth" ? mode : undefined}>
     <section className="landing-screen" aria-label="Welcome to Alert Barangay">
@@ -224,12 +236,12 @@ export default function LoginPage() {
       <div className="form-wrap">
         <button className="auth-back" type="button" aria-label="Back to welcome" onClick={backToLanding}>&larr;</button>
         <span className="auth-mark" aria-hidden="true"><ShieldIcon /></span>
-        <p className="eyebrow">{signingUp ? "Create your account" : copy.eyebrow}</p>
-        <h1 id="form-title" tabIndex={-1}>{signingUp ? "Create Your Account" : "Hello Welcome Back!"}</h1>
-        <p className="intro">{signingUp ? "Sign-ups are for residents. Barangay official accounts are created by an administrator." : copy.intro}</p>
+        <p className="eyebrow">{eyebrow}</p>
+        <h1 id="form-title" tabIndex={-1}>{heading}</h1>
+        <p className="intro">{intro}</p>
 
         <form onSubmit={(event) => void submit(event)} noValidate>
-          {!signingUp && <fieldset className="roles">
+          {mode === "sign-in" && <fieldset className="roles">
             <legend>I am signing in as</legend>
             <label><input type="radio" name="role" value="resident" checked={portal === "resident"} onChange={() => setPortal("resident")} /><span className="chip">Resident</span></label>
             <label><input type="radio" name="role" value="official" checked={portal === "official"} onChange={() => setPortal("official")} /><span className="chip">Barangay Official</span></label>
@@ -243,18 +255,21 @@ export default function LoginPage() {
             <label htmlFor="email">Email address</label>
             <input id="email" type="email" placeholder="you@example.com" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
           </div>
-          <PasswordField id="password" label="Password" value={password} onChange={setPassword} autoComplete={signingUp ? "new-password" : "current-password"} show={showPassword} onToggle={() => setShowPassword((v) => !v)} />
+          {!resetting && <PasswordField id="password" label="Password" value={password} onChange={setPassword} autoComplete={signingUp ? "new-password" : "current-password"} show={showPassword} onToggle={() => setShowPassword((v) => !v)} />}
+          {mode === "sign-in" && <button type="button" className="forgot-link" onClick={() => openAuth("reset")}>Forgot password?</button>}
           {signingUp && <PasswordField id="confirm-password" label="Confirm password" value={confirm} onChange={setConfirm} autoComplete="new-password" show={showConfirm} onToggle={() => setShowConfirm((v) => !v)} />}
 
           <button className="submit" type="submit" disabled={busy}>
-            {busy ? (signingUp ? "Creating account…" : "Signing in…") : <>{signingUp ? "Sign Up" : "Sign In"} <span aria-hidden="true">&rarr;</span></>}
+            {busy
+              ? (signingUp ? "Creating account…" : resetting ? "Sending link…" : "Signing in…")
+              : <>{signingUp ? "Sign Up" : resetting ? "Send reset link" : "Sign In"} <span aria-hidden="true">&rarr;</span></>}
           </button>
           <p className="form-message" role="status" aria-live="polite" data-kind={message?.kind} data-visible={message ? "true" : undefined}>{message?.text}</p>
         </form>
 
         <p className="mode-prompt">
-          <span>{signingUp ? "Already have an account?" : "New to Alert Barangay?"}</span>
-          <button className="mode-toggle" type="button" onClick={toggleMode}>{signingUp ? "Sign in" : "Create an account"}</button>
+          <span>{mode === "sign-in" ? "New to Alert Barangay?" : resetting ? "Remembered it?" : "Already have an account?"}</span>
+          <button className="mode-toggle" type="button" onClick={toggleMode}>{mode === "sign-in" ? "Create an account" : "Sign in"}</button>
         </p>
       </div>
       <CardWaves />

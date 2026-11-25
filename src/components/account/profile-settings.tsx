@@ -8,7 +8,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 const maxPhotoBytes = 3 * 1024 * 1024;
 const photoTypes = ["image/jpeg", "image/png", "image/webp"];
 
-export function ProfileSettings({ email, initialName, initialAvatarUrl }: { email: string; initialName: string; initialAvatarUrl: string }) {
+export function ProfileSettings({ email, initialName, initialAvatarUrl, embedded = false }: { email: string; initialName: string; initialAvatarUrl: string; embedded?: boolean }) {
   const router = useRouter();
   const [name, setName] = useState(initialName);
   const [avatarUrl, setAvatarUrl] = useState(initialAvatarUrl);
@@ -17,6 +17,7 @@ export function ProfileSettings({ email, initialName, initialAvatarUrl }: { emai
   const [profileBusy, setProfileBusy] = useState(false);
   const [profileError, setProfileError] = useState("");
   const [profileSuccess, setProfileSuccess] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordBusy, setPasswordBusy] = useState(false);
@@ -82,16 +83,25 @@ export function ProfileSettings({ email, initialName, initialAvatarUrl }: { emai
     event.preventDefault(); setPasswordError(""); setPasswordSuccess("");
     if (password.length < 12) { setPasswordError("Use a password with at least 12 characters."); return; }
     if (password !== confirmPassword) { setPasswordError("The passwords do not match."); return; }
+    if (password === currentPassword) { setPasswordError("Choose a password different from your current one."); return; }
     setPasswordBusy(true);
-    const { error } = await createSupabaseBrowserClient().auth.updateUser({ password });
+    const client = createSupabaseBrowserClient();
+    // Confirm the current password first, so someone using an unlocked,
+    // signed-in screen cannot take over the account.
+    const { error: verifyError } = await client.auth.signInWithPassword({ email, password: currentPassword });
+    if (verifyError) { setPasswordBusy(false); setPasswordError("Your current password is incorrect."); return; }
+    const { error } = await client.auth.updateUser({ password });
     setPasswordBusy(false);
     if (error) { setPasswordError(error.message); return; }
-    setPassword(""); setConfirmPassword(""); setPasswordSuccess("Password changed successfully.");
+    setCurrentPassword(""); setPassword(""); setConfirmPassword(""); setPasswordSuccess("Password changed successfully.");
   }
 
-  return <div className="page-wrap">
-    <div className="topline"><div className="breadcrumb"><strong>Profile</strong></div></div>
-    <div className="page-heading"><div><div className="eyebrow">YOUR ACCOUNT</div><h1>Edit profile</h1><p className="subtitle">Update your profile details and sign-in password.</p></div></div>
+  // Inside the resident/official shell the page heading is provided by the shell.
+  return <div className={embedded ? undefined : "page-wrap"}>
+    {!embedded && <>
+      <div className="topline"><div className="breadcrumb"><strong>Profile</strong></div></div>
+      <div className="page-heading"><div><div className="eyebrow">YOUR ACCOUNT</div><h1>Edit profile</h1><p className="subtitle">Update your profile details and sign-in password.</p></div></div>
+    </>}
     <div className="profile-settings-grid">
       <section className="profile-settings-card" aria-labelledby="profile-details-title">
         <div className="profile-settings-heading"><span className="profile-section-icon"><Camera size={18} /></span><div><h2 id="profile-details-title">Profile details</h2><p>Update the name and photo shown on your dashboard.</p></div></div>
@@ -106,6 +116,7 @@ export function ProfileSettings({ email, initialName, initialAvatarUrl }: { emai
       <section className="profile-settings-card" aria-labelledby="password-title">
         <div className="profile-settings-heading"><span className="profile-section-icon"><KeyRound size={18} /></span><div><h2 id="password-title">Change password</h2><p>Choose a new password to secure your account.</p></div></div>
         <form className="profile-settings-form" onSubmit={(event) => void updatePassword(event)}>
+          <label className="field"><span>Current password</span><input type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required /></label>
           <label className="field"><span>New password</span><input type="password" autoComplete="new-password" minLength={12} value={password} onChange={(event) => setPassword(event.target.value)} required /><small className="field-hint">Use at least 12 characters.</small></label>
           <label className="field"><span>Confirm new password</span><input type="password" autoComplete="new-password" minLength={12} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required /></label>
           {passwordError && <div className="inline-error" role="alert">{passwordError}</div>}{passwordSuccess && <div className="profile-success" role="status"><CheckCircle2 size={15} />{passwordSuccess}</div>}

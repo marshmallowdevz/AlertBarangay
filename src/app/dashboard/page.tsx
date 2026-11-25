@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { RoleDashboard } from "@/components/role-dashboard";
 import { OfficialDashboard } from "@/components/official/official-dashboard";
 import { requireRolePage } from "@/lib/auth/require-role-page";
+
+export const metadata: Metadata = { title: "Official dashboard" };
 
 export const dynamic = "force-dynamic";
 
