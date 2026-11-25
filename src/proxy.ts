@@ -66,9 +66,9 @@ export async function proxy(request: NextRequest) {
     const isApi = pathname === "/api" || pathname.startsWith("/api/");
     let isActiveAdmin = false;
     if (user && (isAdminPage || isAdminApi)) {
-      const { data: profile, error } = await supabase.from("profiles").select("role,is_active").eq("id", user.id).maybeSingle();
+      const { data: profile, error } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
       if (error) console.error("[maintenance] admin profile lookup failed", { userId: user.id, message: error.message });
-      isActiveAdmin = profile?.role === "admin" && profile.is_active;
+      isActiveAdmin = profile?.role === "admin" && profile.is_active !== false;
     }
 
     if (isActiveAdmin) return response;

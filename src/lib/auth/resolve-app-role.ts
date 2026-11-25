@@ -20,11 +20,11 @@ export async function resolveAppRole(
   // Always read the profile so a disabled account (is_active = false) is
   // refused even while its access token is still valid.
   void accessToken;
-  let profile: { role: unknown; is_active: boolean } | null;
+  let profile: { role: unknown; is_active?: boolean | null } | null;
   try {
     const result = await supabase
       .from("profiles")
-      .select("role, is_active")
+      .select("*") // "*" so this still works if is_active has not been added yet
       .eq("id", userId)
       .maybeSingle();
     if (result.error) throw new RoleResolutionError();
@@ -33,7 +33,7 @@ export async function resolveAppRole(
     throw new RoleResolutionError();
   }
   if (!profile) return { ok: false, reason: "missing" };
-  if (!profile.is_active) return { ok: false, reason: "inactive" };
+  if (profile.is_active === false) return { ok: false, reason: "inactive" };
   if (!isAppRole(profile.role)) return { ok: false, reason: "unrecognized" };
 
   const role = profile.role;

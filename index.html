@@ -103,7 +103,7 @@
     .signup-note { display: none; margin: 0 0 16px; color: var(--muted); font-size: 13px; line-height: 1.5; }
 
     /* Role chooser */
-    .roles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 0 18px; padding: 0; border: 0; }
+    .roles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 0 0 18px; padding: 0; border: 0; }
     .roles legend { margin: 0 0 8px 2px; padding: 0; color: #fff4f7; font-size: 14px; font-weight: 600; }
     .roles label { position: relative; display: block; }
     .roles input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
@@ -253,7 +253,6 @@
             <legend>I am signing in as</legend>
             <label><input type="radio" name="role" value="resident" checked /><span class="chip">Resident</span></label>
             <label><input type="radio" name="role" value="official" /><span class="chip">Barangay Official</span></label>
-            <label><input type="radio" name="role" value="admin" /><span class="chip">Admin</span></label>
           </fieldset>
 
           <div class="field" id="full-name-field" hidden>

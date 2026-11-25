@@ -3,7 +3,7 @@ export type AppRole = "resident" | "official" | "admin";
 export const roleDashboardPaths: Record<AppRole, string> = {
   resident: "/resident",
   official: "/dashboard",
-  admin: "/admin/users",
+  admin: "/admin",
 };
 
 export function isAppRole(role: unknown): role is AppRole {

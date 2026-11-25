@@ -12,8 +12,8 @@ export async function requireRolePage(role: AppRole) {
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
-  const { data: profile } = await supabase.from("profiles").select("role,is_active,full_name").eq("id", user.id).maybeSingle();
-  if (!profile || !profile.is_active || !isAppRole(profile.role)) redirect("/login?notice=role");
+  const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
+  if (!profile || profile.is_active === false || !isAppRole(profile.role)) redirect("/login?notice=role");
   if (profile.role !== role) redirect(getRoleDashboardPath(profile.role) ?? "/login?notice=role");
   return { userId: user.id, email: user.email ?? "", fullName: (profile.full_name as string) || "" };
 }
