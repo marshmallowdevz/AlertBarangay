@@ -2,12 +2,20 @@ import { useState } from 'react';
 import './Official.css';
 import LoadingIndicator from './LoadingIndicator';
 
-const responseTypes = ['Medical', 'Fire', 'Rescue', 'Evacuation'];
+const responseTypes = [
+  'Fire',
+  'Rescue',
+  'Department of Public Services',
+  'Visayan Electric',
+  'MCWD',
+  'DPWH',
+  'CCDRRMO',
+];
 
 export default function DispatchView({ reports, dispatches, onDispatch }) {
   const dispatchableReports = reports.filter((report) => !['Resolved', 'Closed'].includes(report.status));
   const [reportId, setReportId] = useState(dispatchableReports[0]?.id ?? '');
-  const [responseType, setResponseType] = useState('Medical');
+  const [responseType, setResponseType] = useState(responseTypes[0]);
   const [note, setNote] = useState('');
   const [formError, setFormError] = useState('');
   const [confirmation, setConfirmation] = useState('');

@@ -5,13 +5,13 @@ import Icon from './Icon';
 const icon = (name) => <Icon name={name} />;
 
 const responseTypes = [
-  { label: 'Fire', icon: 'fire' },
-  { label: 'Rescue', icon: 'dispatch' },
-  { label: 'Department of Public Services', icon: 'trash' },
-  { label: 'Visayan Electric', icon: 'electric' },
-  { label: 'MCWD', icon: 'water' },
-  { label: 'DPWH', icon: 'road' },
-  { label: 'CCDRRMO', icon: 'alert' },
+  'Fire',
+  'Rescue',
+  'Department of Public Services',
+  'Visayan Electric',
+  'MCWD',
+  'DPWH',
+  'CCDRRMO',
 ];
 
 function toTelHref(phone = '') {
@@ -30,9 +30,9 @@ export default function OverviewView({ onNavigate, contacts, onManageContacts, r
         <section className="card">
         <div className="card-head"><h2>{icon('response')} Response types</h2><button type="button" className="link-btn" onClick={() => onNavigate('dispatch')}>Open dispatch</button></div>
         <div className="type-grid">
-          {responseTypes.map(({ label, icon: typeIcon }) => (
+          {responseTypes.map((label) => (
             <button key={label} type="button" className="type-tile" onClick={() => onNavigate('dispatch')}>
-              {icon(typeIcon)}<span>{label}</span>
+              <span>{label}</span>
             </button>
           ))}
         </div>

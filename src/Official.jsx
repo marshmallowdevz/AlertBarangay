@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import './Official.css';
+import * as supabaseClientModule from './supabaseClient';
 import { configError, isConfigured } from './supabaseClient';
 import { initialConversations, initialResidents } from './dashboardData';
 import OverviewView from './OverviewView';
@@ -9,7 +10,7 @@ import DispatchView from './DispatchView';
 import AnnouncementsView from './AnnouncementsView';
 import { archiveAnnouncement, createAnnouncement, deleteAnnouncement, listAnnouncements, subscribeToAnnouncements, updateAnnouncement } from './announcementService';
 import Icon from './Icon';
-import { dispatchReport, listReports } from './reportService';
+import { dispatchReport, listReports, markReportDone } from './reportService';
 import {
   getOrInitializeDashboardContacts,
   getOrInitializeDashboardProfile,
@@ -23,6 +24,9 @@ import { listNotifications, subscribeToNotifications } from './notificationServi
 import NotificationsView from './NotificationsView';
 import ReportsView from './ReportsView';
 import LoadingIndicator from './LoadingIndicator';
+
+// Works whether or not supabaseClient.js exports a `supabase` object.
+const supabase = supabaseClientModule.supabase;
 
 const renderIcon = (name, size = 18) => <Icon name={name} size={size} />;
 
@@ -48,6 +52,7 @@ const defaultSharedProfile = { name: 'Captain Dela Cruz', picture: '' };
 const themeStorageKey = 'alertBarangay.theme';
 const sidebarStorageKey = 'alertBarangay.sidebarHidden';
 const themeModes = ['system', 'light', 'dark'];
+const finishedStatuses = ['Resolved', 'Closed', 'Done'];
 
 function readThemeMode() {
   try {
@@ -129,7 +134,7 @@ function Official({ user, onSignOut }) {
   const [announcementBody, setAnnouncementBody] = useState('');
   const [formError, setFormError] = useState('');
   const [now, setNow] = useState(() => new Date());
-  const dispatchCount = operationalData.reports.filter((report) => !['Resolved', 'Closed'].includes(report.status)).length;
+  const dispatchCount = operationalData.reports.filter((report) => !finishedStatuses.includes(report.status)).length;
 
   useEffect(() => {
     const mediaQuery = window.matchMedia?.('(prefers-color-scheme: dark)');
@@ -240,12 +245,14 @@ function Official({ user, onSignOut }) {
     };
   }, [announcementRetry]);
 
+  // Reload reports on first load, on retry, and whenever the signed-in user changes
+  // (reports are protected by RLS, so they come back empty until a session exists).
   useEffect(() => {
     let active = true;
     if (!isConfigured) return () => { active = false; };
 
     listReports()
-      .then((rows) => { if (active) setOperationalData((current) => ({ ...current, reports: rows })); })
+      .then((rows) => { if (active) { setOperationalData((current) => ({ ...current, reports: rows })); setReportsError(''); } })
       .catch((error) => {
         console.error('Unable to load shared reports.', error);
         if (active) setReportsError(error.message || 'Incident reports could not be loaded.');
@@ -253,7 +260,27 @@ function Official({ user, onSignOut }) {
       .finally(() => { if (active) setReportsLoading(false); });
 
     return () => { active = false; };
-  }, [reportsRetry]);
+  }, [reportsRetry, user]);
+
+  // Live updates: refresh the list whenever a report or its history changes.
+  useEffect(() => {
+    if (!isConfigured || !supabase?.channel) return undefined;
+    let active = true;
+    const refresh = () => {
+      listReports()
+        .then((rows) => { if (active) setOperationalData((current) => ({ ...current, reports: rows })); })
+        .catch((error) => console.error('Unable to refresh reports after a live change.', error));
+    };
+    const channel = supabase
+      .channel('official-reports-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reports' }, refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'report_history' }, refresh)
+      .subscribe();
+    return () => {
+      active = false;
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
 
   useEffect(() => {
     let active = true;
@@ -478,6 +505,14 @@ function Official({ user, onSignOut }) {
     setOperationalData((current) => ({ ...current, reports: rows }));
   };
 
+  const markDone = async ({ reportId, note }) => {
+    const report = operationalData.reports.find((item) => item.id === reportId);
+    if (!report) throw new Error('That incident could not be found. Refresh the dashboard and try again.');
+    await markReportDone({ reportId: report.databaseId, note });
+    const rows = await listReports();
+    setOperationalData((current) => ({ ...current, reports: rows }));
+  };
+
   return (
     <div className={`app ${sidebarHidden ? 'sidebar-hidden' : ''}`}>
       {sidebarOpen && <button type="button" className="overlay" aria-label="Close menu" onClick={() => setSidebarOpen(false)} />}
@@ -669,6 +704,7 @@ function Official({ user, onSignOut }) {
               loading={reportsLoading}
               error={reportsError}
               onRetry={() => { setReportsLoading(true); setReportsError(''); setReportsRetry((value) => value + 1); }}
+              onMarkDone={markDone}
             />
           )}
           {activeNav === 'dispatch' && (
@@ -684,7 +720,7 @@ function Official({ user, onSignOut }) {
           {activeNav === 'notifications' && (
             <NotificationsView notifications={notifications} loading={notificationsLoading} error={notificationsError} onRetry={isConfigured ? () => { setNotificationsLoading(true); setNotificationsError(''); setNotificationsRetry((value) => value + 1); } : undefined} />
           )}
-          <div className="footer">Â© 2026 AlertBarangay â€¢ Built for faster local emergency coordination</div>
+          <div className="footer">© 2026 AlertBarangay. All rights reserved.</div>
         </div>
       </main>
 
@@ -795,4 +831,3 @@ function Official({ user, onSignOut }) {
 }
 
 export default Official;
-

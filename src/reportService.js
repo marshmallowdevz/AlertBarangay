@@ -67,3 +67,13 @@ export async function dispatchReport({ reportId, responseType, note }) {
   if (error) throw error;
   return toHistory(data);
 }
+
+export async function markReportDone({ reportId, note }) {
+  const { data, error } = await supabase.rpc('mark_report_done', {
+    p_report_id: reportId,
+    p_note: note || null,
+  });
+
+  if (error) throw error;
+  return toHistory(data);
+}

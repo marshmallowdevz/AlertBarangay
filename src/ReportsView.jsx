@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import './Official.css';
 import LoadingIndicator from './LoadingIndicator';
+import { supabase } from './supabaseClient';
 
 const reportTypes = ['Medical', 'Fire', 'Rescue', 'Flooding', 'Power', 'Other'];
 const reportStatuses = ['Pending', 'Assigned', 'In progress', 'Monitoring', 'Resolved', 'Closed'];
@@ -13,11 +14,46 @@ function formatDate(value) {
     : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 }
 
-export default function ReportsView({ reports, loading, error, onRetry }) {
+export default function ReportsView({ reports, loading, error, onRetry, onMarkDone }) {
   const [query, setQuery] = useState('');
   const [type, setType] = useState('All categories');
   const [status, setStatus] = useState('All statuses');
   const [severity, setSeverity] = useState('All severities');
+  const [busyReportId, setBusyReportId] = useState('');
+  const [actionError, setActionError] = useState('');
+
+  // Always points to the latest refetch function, so the subscription is created only once
+  const reloadRef = useRef(onRetry);
+  useEffect(() => {
+    reloadRef.current = onRetry;
+  }, [onRetry]);
+
+  // Realtime: refetch whenever a report or its history changes
+  useEffect(() => {
+    const channel = supabase
+      .channel('official-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reports' }, () => reloadRef.current?.())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'report_history' }, () => reloadRef.current?.())
+      .subscribe((subscriptionStatus) => console.log('realtime:', subscriptionStatus));
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const markDone = async (report) => {
+    if (!onMarkDone) return;
+    setBusyReportId(report.id);
+    setActionError('');
+    try {
+      await onMarkDone({ reportId: report.id, note: '' });
+    } catch (err) {
+      console.error('Unable to mark the report as done.', err);
+      setActionError(`The report could not be marked as done: ${err.message || 'An unexpected error occurred.'}`);
+    } finally {
+      setBusyReportId('');
+    }
+  };
 
   const filteredReports = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -47,6 +83,7 @@ export default function ReportsView({ reports, loading, error, onRetry }) {
       </div>
       {loading && <LoadingIndicator message="Loading incident reports…" />}
       {error && <div className="error-row"><p className="form-error" role="alert">{error}</p><button type="button" className="btn btn-outline" onClick={onRetry} disabled={loading}>Retry</button></div>}
+      {actionError && <p className="form-error" role="alert">{actionError}</p>}
       {!loading && !error && filteredReports.length === 0 && <p className="empty">{reports.length ? 'No reports match these filters.' : 'No incident reports have been submitted yet.'}</p>}
       <div className="stack">
         {!error && filteredReports.map((report) => (
@@ -58,6 +95,18 @@ export default function ReportsView({ reports, loading, error, onRetry }) {
             </summary>
             <p>{report.description}</p>
             <small>Reported by {report.author || 'Resident'} · {formatDate(report.created_at)}</small>
+            {onMarkDone && !['Resolved', 'Closed'].includes(report.status) && (
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn btn-maroon"
+                  disabled={busyReportId === report.id}
+                  onClick={() => markDone(report)}
+                >
+                  {busyReportId === report.id ? <LoadingIndicator message="Saving…" compact /> : 'Mark as done'}
+                </button>
+              </div>
+            )}
             <h3>History</h3>
             {report.dispatchHistory?.length ? (
               <ol className="report-history">
