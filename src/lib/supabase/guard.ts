@@ -31,13 +31,13 @@ export async function requireAdmin() {
 
   // Use the server-only admin client for the profile lookup so authorization
   // does not depend on a caller's profiles SELECT policy being configured.
-  let profile: { id: string; role: string; is_active?: boolean | null } | null = null;
+  let profile: { id: string; role: string } | null = null;
   let profileReadFailed = false;
   try {
     const admin = createSupabaseAdminClient();
     const { data, error } = await admin
       .from("profiles")
-      .select("*")
+      .select("id, role")
       .eq("id", user.id)
       .maybeSingle();
     if (error) {
@@ -62,14 +62,15 @@ export async function requireAdmin() {
     return { ok: false as const, status: 500, reason: "verification_failed" as const };
   }
 
-  if (profile?.role === "admin" && profile.is_active !== false) {
+  const isBanned = Boolean(user.banned_until && new Date(user.banned_until).getTime() > Date.now());
+  if (profile?.role === "admin" && !isBanned) {
     return { ok: true as const, actor: user };
   }
 
   console.warn("[admin-auth] request denied: role check did not confirm admin", {
     userId: user.id,
     profileRole: profile?.role ?? null,
-    profileActive: profile?.is_active ?? null,
+    isBanned,
   });
   return { ok: false as const, status: 403, reason: "not_admin" as const };
 }

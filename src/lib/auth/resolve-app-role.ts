@@ -17,14 +17,18 @@ export async function resolveAppRole(
   userId: string,
   accessToken?: string,
 ): Promise<AppRoleResolution> {
-  // Always read the profile so a disabled account (is_active = false) is
-  // refused even while its access token is still valid.
+  // Always check Auth ban status so disabled accounts are refused even while
+  // their access token is still valid.
   void accessToken;
-  let profile: { role: unknown; is_active?: boolean | null } | null;
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user?.banned_until && new Date(user.banned_until).getTime() > Date.now()) {
+    return { ok: false, reason: "inactive" };
+  }
+  let profile: { role: unknown } | null;
   try {
     const result = await supabase
       .from("profiles")
-      .select("*") // "*" so this still works if is_active has not been added yet
+      .select("id, role")
       .eq("id", userId)
       .maybeSingle();
     if (result.error) throw new RoleResolutionError();
@@ -33,7 +37,6 @@ export async function resolveAppRole(
     throw new RoleResolutionError();
   }
   if (!profile) return { ok: false, reason: "missing" };
-  if (profile.is_active === false) return { ok: false, reason: "inactive" };
   if (!isAppRole(profile.role)) return { ok: false, reason: "unrecognized" };
 
   const role = profile.role;

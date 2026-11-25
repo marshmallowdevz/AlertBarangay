@@ -15,7 +15,6 @@ export type ManagedUser = {
   full_name: string;
   role: UserRole;
   position: string | null;
-  department: string | null;
   is_active: boolean;
   created_at: string;
   last_sign_in_at: string | null;
@@ -27,5 +26,4 @@ export type UserDraft = {
   full_name: string;
   role: UserRole;
   position: string;
-  department: string;
 };

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { cleanUserMetadataLabel } from "@/lib/admin/user-labels";
 import type { AccountMetrics, ManagedUser, UserRole } from "@/types/user";
 
 export async function getAdminUserDirectory(): Promise<{ users: ManagedUser[]; metrics: AccountMetrics }> {
@@ -17,7 +18,7 @@ export async function getAdminUserDirectory(): Promise<{ users: ManagedUser[]; m
   for (let from = 0; ; from += 1000) {
     const { data, error } = await admin
       .from("profiles")
-      .select("id, full_name, role, position, department, is_active, created_at")
+      .select("id, full_name, role")
       .range(from, from + 999);
     if (error) throw error;
     profiles.push(...data);
@@ -32,10 +33,9 @@ export async function getAdminUserDirectory(): Promise<{ users: ManagedUser[]; m
       email: user.email ?? "",
       full_name: profile?.full_name || user.user_metadata?.full_name || "",
       role: (profile?.role ?? "resident") as UserRole,
-      position: profile?.position ?? null,
-      department: profile?.department ?? null,
-      is_active: profile?.is_active ?? false,
-      created_at: profile?.created_at ?? user.created_at,
+      position: cleanUserMetadataLabel(user.user_metadata?.position),
+      is_active: !user.banned_until || new Date(user.banned_until).getTime() <= Date.now(),
+      created_at: user.created_at,
       last_sign_in_at: user.last_sign_in_at ?? null,
     };
   });

@@ -15,7 +15,8 @@ export async function GET(request: Request) {
 
   if (user) {
     const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
-    if (profile?.role === "admin" && profile.is_active !== false) {
+    const isBanned = Boolean(user.banned_until && new Date(user.banned_until).getTime() > Date.now());
+    if (profile?.role === "admin" && !isBanned) {
       return NextResponse.redirect(new URL("/admin/settings/maintenance", request.url));
     }
   }

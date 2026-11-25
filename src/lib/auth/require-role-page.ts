@@ -14,7 +14,8 @@ export async function requireRolePage(role: AppRole | AppRole[]) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
   const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
-  if (!profile || profile.is_active === false || !isAppRole(profile.role)) redirect("/login?notice=role");
+  const isBanned = Boolean(user.banned_until && new Date(user.banned_until).getTime() > Date.now());
+  if (!profile || isBanned || !isAppRole(profile.role)) redirect("/login?notice=role");
   if (!allowed.includes(profile.role)) redirect(getRoleDashboardPath(profile.role) ?? "/login?notice=role");
   return {
     userId: user.id,

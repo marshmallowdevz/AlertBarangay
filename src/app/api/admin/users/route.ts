@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { cleanUserMetadataLabel } from "@/lib/admin/user-labels";
 import { getAdminUserDirectory } from "@/lib/admin/user-directory";
 import { jsonError } from "@/lib/http";
 import { adminAccessResponse, requireAdmin } from "@/lib/supabase/guard";
@@ -50,30 +51,24 @@ export async function POST(request: Request) {
       return jsonError("Enter a valid email, full name, role, and temporary password of at least 8 characters.", 400);
     }
 
-    const position = role === "official" && typeof body.position === "string" ? body.position.trim() || null : null;
-    const department = role === "official" && typeof body.department === "string" ? body.department.trim() || null : null;
-    if ((position?.length ?? 0) > 120 || (department?.length ?? 0) > 120) {
-      return jsonError("Position and department must be 120 characters or fewer.", 400);
+    const position = role === "official" ? cleanUserMetadataLabel(body.position) : null;
+    if ((position?.length ?? 0) > 120) {
+      return jsonError("Position must be 120 characters or fewer.", 400);
     }
 
     admin = createSupabaseAdminClient();
     const { data, error } = await admin.auth.admin.createUser({
       email, password, email_confirm: true,
-      // user_metadata is editable by the user, so it never carries the role.
-      // app_metadata can only be set by the server.
-      user_metadata: { full_name, position, department },
-      app_metadata: { admin_managed: true },
+      // Keep the dashboard role in both metadata stores; app_metadata is the
+      // trusted server-side authorization source.
+      user_metadata: { full_name, role, position },
+      app_metadata: { admin_managed: true, role },
     });
     if (error) throw error;
     createdUserId = data.user.id;
 
     failureStage = "profile";
-    const { error: profileError } = await admin.from("profiles").upsert({
-      id: createdUserId, full_name, role,
-      position,
-      department,
-      is_active: true,
-    });
+    const { error: profileError } = await admin.from("profiles").upsert({ id: createdUserId, full_name, role });
     if (profileError) throw profileError;
 
     failureStage = "audit";
