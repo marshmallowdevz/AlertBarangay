@@ -23,7 +23,7 @@
 .admin-shell.sidebar-collapsed .sidebar{width:70px;padding-left:9px;padding-right:9px}
 .admin-shell.sidebar-collapsed .main-content{margin-left:70px}
 .admin-shell.sidebar-collapsed .brand-text,.admin-shell.sidebar-collapsed .nav-caption,.admin-shell.sidebar-collapsed .nav-label,.admin-shell.sidebar-collapsed .account-info{display:none}
-.admin-shell.sidebar-collapsed .sidebar-header{flex-direction:column-reverse;justify-content:flex-end;gap:14px}
+.admin-shell.sidebar-collapsed .sidebar-header{flex-direction:column;align-items:center;justify-content:flex-start;gap:14px;padding-bottom:13px;margin-bottom:14px;border-bottom:1px solid #ffffff20}
 .admin-shell.sidebar-collapsed .brand-lockup{justify-content:center}
 .admin-shell.sidebar-collapsed .brand-badge{width:40px;height:40px}
 .admin-shell.sidebar-collapsed .side-nav{gap:7px}
@@ -120,7 +120,6 @@
 .support-email{display:inline-flex;align-items:center;gap:10px;padding:11px 13px;background:var(--ivory);border:1px solid var(--border-soft);border-radius:9px;color:#60433a}
 .support-email span small,.support-email span strong{display:block}.support-email span small{font-size:9px;color:var(--muted);margin-bottom:3px}.support-email span strong{font-size:11px}
 .settings-note{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:10px;margin-top:16px}.settings-note svg{color:#4a805d}
-.settings-footnote{margin-top:13px;color:var(--muted);font-size:10px}.settings-footnote code{background:var(--ivory);padding:2px 4px;border-radius:4px}
 .maintenance-page-heading{margin-bottom:8px}.maintenance-back-link{display:inline-flex;align-items:center;gap:7px;color:#725244;font-size:11px;font-weight:700;margin:0 0 17px}.maintenance-back-link:hover{text-decoration:underline}
 .maintenance-card{max-width:880px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:23px;box-shadow:var(--shadow)}
 .maintenance-card-header{display:flex;align-items:center;gap:12px;padding-bottom:18px;border-bottom:1px solid var(--border-soft)}

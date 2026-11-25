@@ -20,6 +20,5 @@ export function SettingsPage({ email, maintenanceMode }: { email: string; mainte
         </div>
       </section>
     </div>
-    <p className="settings-footnote">The support address can be configured with <code>NEXT_PUBLIC_SUPPORT_EMAIL</code>.</p>
   </div>;
 }

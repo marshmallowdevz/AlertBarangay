@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { CircleAlert, Edit3, KeyRound, Plus, Search, Shield, Trash2, Users, X } from "lucide-react";
+import { CircleAlert, Edit3, KeyRound, Plus, Search, Trash2, Users, X } from "lucide-react";
 import type { ManagedUser, UserDraft, UserRole } from "@/types/user";
 
 type UserGroup = "all" | "residents" | "officials";
@@ -184,7 +184,6 @@ export function UsersDashboard({ currentUserId, previewMode = false, initialFilt
   return <div className="page-wrap">
     <div className="topline"><div className="breadcrumb"><strong>User management</strong></div></div>
     <div className="page-heading"><div><div className="eyebrow">ADMINISTRATION</div><h1>User management</h1><p className="subtitle">Create accounts and manage access to the AlertBarangay dashboard.</p></div><button className="button primary" onClick={openCreate} disabled={previewMode}><Plus size={16} strokeWidth={2.5} />Create account</button></div>
-    <div className="notice"><Shield size={18} /><div><strong>{previewMode ? "Preview mode — sample data" : "Account access is managed centrally"}</strong><p>{previewMode ? "This page is showing local demo accounts. Account changes are disabled in preview mode." : "New accounts can sign in to connected AlertBarangay dashboards using their assigned email and password."}</p></div></div>
     <section className="panel" aria-label="User accounts">
       <div role="tablist" aria-label="Account group" style={{ display: "flex", gap: 8, padding: "16px 20px 0" }}>
         <button type="button" role="tab" aria-selected={group === "all"} className={`button ${group === "all" ? "primary" : "secondary"}`} onClick={() => selectGroup("all")}>All accounts</button>

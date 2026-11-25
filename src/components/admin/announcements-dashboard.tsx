@@ -65,7 +65,6 @@ export function AnnouncementsDashboard() {
   return <div className="page-wrap">
     <div className="topline"><div className="breadcrumb"><strong>Announcements</strong></div></div>
     <div className="page-heading"><div><div className="eyebrow">COMMUNITY UPDATES</div><h1>Announcements</h1><p className="subtitle">Create updates and publish them for connected AlertBarangay dashboards.</p></div><button type="button" className="button primary" onClick={openCreate}><Plus size={16} />New announcement</button></div>
-    <div className="notice"><Bell size={18} /><div><strong>Published announcements are shared</strong><p>Connected dashboards can read every published announcement. Drafts remain visible only to administrators.</p></div></div>
     {toast && <div role="status" className="toast announcement-toast">{toast}<button onClick={() => setToast("")} aria-label="Dismiss message"><X size={14} /></button></div>}
     {error && !editing && <div className="inline-error announcement-error"><CircleAlert size={15} />{error}<button onClick={() => void load()}>Try again</button></div>}
     {loading ? <div className="loading-state"><div className="skeleton" /><div className="skeleton" /></div> : error ? null : items.length ? <div className="announcement-list">{items.map((item) => <article className="announcement-card" key={item.id}>
