@@ -1,15 +1,15 @@
 import { redirect } from "next/navigation";
 import { AdminShell } from "@/components/admin/admin-shell";
-import { resolveAppRole } from "@/lib/auth/resolve-app-role";
+import { getRoleDashboardPath, isAppRole } from "@/lib/auth/roles";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export default async function AdminLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
-  const resolution = await resolveAppRole(supabase, user.id);
-  if (!resolution.ok) redirect("/login?notice=role");
-  if (resolution.role !== "admin") redirect(resolution.destination);
+  const { data: profile } = await supabase.from("profiles").select("role,is_active,full_name,avatar_url").eq("id", user.id).maybeSingle();
+  if (!profile || !profile.is_active || !isAppRole(profile.role)) redirect("/login?notice=role");
+  if (profile.role !== "admin") redirect(getRoleDashboardPath(profile.role) ?? "/login?notice=role");
 
-  return <AdminShell email={user.email ?? ""}>{children}</AdminShell>;
+  return <AdminShell email={user.email ?? ""} fullName={profile?.full_name ?? ""} avatarUrl={profile?.avatar_url ?? ""}>{children}</AdminShell>;
 }

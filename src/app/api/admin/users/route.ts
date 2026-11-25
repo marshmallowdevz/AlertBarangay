@@ -59,7 +59,7 @@ export async function POST(request: Request) {
     admin = createSupabaseAdminClient();
     const { data, error } = await admin.auth.admin.createUser({
       email, password, email_confirm: true,
-      user_metadata: { full_name, role, position, department },
+      user_metadata: { full_name, role, position, department, admin_managed: true },
     });
     if (error) throw error;
     createdUserId = data.user.id;
@@ -79,6 +79,10 @@ export async function POST(request: Request) {
       action: "user.create", details: { email, role },
     });
     if (auditError) throw auditError;
+    const { error: notificationError } = await admin.from("admin_notifications").insert({
+      event_type: "account.created", message: `New account created: ${full_name}`, subject_id: createdUserId,
+    });
+    if (notificationError) console.error("Could not create account notification", notificationError);
     return Response.json({ id: createdUserId }, { status: 201 });
   } catch (error) {
     console.error("Admin user creation failed", error);
@@ -88,6 +92,10 @@ export async function POST(request: Request) {
         const { error: cleanupError } = await admin.auth.admin.deleteUser(createdUserId);
         rollbackFailed = Boolean(cleanupError);
         if (cleanupError) console.error("Failed to roll back created Auth user", cleanupError);
+        if (!cleanupError) {
+          const { error: notificationCleanupError } = await admin.from("admin_notifications").delete().eq("subject_id", createdUserId);
+          if (notificationCleanupError) console.error("Failed to clear rolled back account notification", notificationCleanupError);
+        }
         const { error: auditError } = await admin.from("audit_logs").insert({
           actor_id: access.actor.id, target_user_id: createdUserId,
           action: "user.create_failed", details: { reason: error instanceof Error ? error.message : "unknown" },

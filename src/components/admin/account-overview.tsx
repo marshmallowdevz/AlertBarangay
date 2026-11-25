@@ -12,7 +12,7 @@ const cards = [
 
 export function AccountOverview({ metrics }: { metrics: AccountMetrics }) {
   return <div className="page-wrap">
-    <div className="topline"><div className="breadcrumb"><span>Workspace</span><span className="crumb-dot">/</span><strong>Overview</strong></div></div>
+    <div className="topline"><div className="breadcrumb"><strong>Overview</strong></div></div>
     <div className="page-heading"><div><div className="eyebrow">ADMINISTRATION</div><h1>Overview</h1><p className="subtitle">A live summary of AlertBarangay account access.</p></div></div>
     <section className="overview-card" aria-label="Account overview">
       <div className="overview-top"><h2 className="section-title">Account overview</h2><Link className="section-note overview-all-link" href="/admin/users">All registered accounts <span aria-hidden="true">→</span></Link></div>

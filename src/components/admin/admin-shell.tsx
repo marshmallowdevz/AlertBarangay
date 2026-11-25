@@ -2,8 +2,9 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { AdminSidebar } from "@/components/admin/sidebar";
+import { AdminTopbar } from "@/components/admin/admin-topbar";
 
-export function AdminShell({ email, children }: { email: string; children: ReactNode }) {
+export function AdminShell({ email, fullName, avatarUrl, children }: { email: string; fullName: string; avatarUrl: string; children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
@@ -15,8 +16,8 @@ export function AdminShell({ email, children }: { email: string; children: React
   }, []);
 
   return <div className={`app-shell admin-shell ${collapsed ? "sidebar-collapsed" : ""}`}>
-    <AdminSidebar email={email} collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} />
+    <AdminSidebar email={email} fullName={fullName} avatarUrl={avatarUrl} collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} />
     {!collapsed && <button type="button" className="sidebar-backdrop" aria-label="Close navigation" onClick={() => setCollapsed(true)} />}
-    <main className="main-content">{children}</main>
+    <main className="main-content"><AdminTopbar email={email} initialName={fullName} initialAvatarUrl={avatarUrl} />{children}</main>
   </div>;
 }

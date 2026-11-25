@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, CircleAlert, Edit3, KeyRound, Plus, Search, Shield, Trash2, Users, X } from "lucide-react";
+import { CircleAlert, Edit3, KeyRound, Plus, Search, Shield, Trash2, Users, X } from "lucide-react";
 import type { ManagedUser, UserDraft, UserRole } from "@/types/user";
 
 type UserGroup = "all" | "residents" | "officials";
@@ -182,7 +182,7 @@ export function UsersDashboard({ currentUserId, previewMode = false, initialFilt
   useEffect(() => { if (dialog?.type === "edit") setActiveStatus(dialog.user.is_active); }, [dialog]);
 
   return <div className="page-wrap">
-    <div className="topline"><div className="breadcrumb"><span>Workspace</span><span className="crumb-dot">/</span><strong>User management</strong></div><div className="top-actions"><button className="icon-button" aria-label="Notifications"><Bell size={17} /><span className="notification-dot" /></button><span className="mini-avatar">AB</span></div></div>
+    <div className="topline"><div className="breadcrumb"><strong>User management</strong></div></div>
     <div className="page-heading"><div><div className="eyebrow">ADMINISTRATION</div><h1>User management</h1><p className="subtitle">Create accounts and manage access to the AlertBarangay dashboard.</p></div><button className="button primary" onClick={openCreate} disabled={previewMode}><Plus size={16} strokeWidth={2.5} />Create account</button></div>
     <div className="notice"><Shield size={18} /><div><strong>{previewMode ? "Preview mode — sample data" : "Account access is managed centrally"}</strong><p>{previewMode ? "This page is showing local demo accounts. Account changes are disabled in preview mode." : "New accounts can sign in to connected AlertBarangay dashboards using their assigned email and password."}</p></div></div>
     <section className="panel" aria-label="User accounts">
@@ -206,7 +206,7 @@ export function UsersDashboard({ currentUserId, previewMode = false, initialFilt
       </div>
       {loading ? <div className="loading-state" aria-label="Loading user accounts"><div className="skeleton" /><div className="skeleton" /><div className="skeleton" /></div> : loadError ? <div className="empty-state"><div className="empty-icon"><CircleAlert size={20} /></div><strong>Couldn't load accounts</strong><p>{loadError}</p><button className="button secondary" style={{ marginTop: 14 }} onClick={() => void loadUsers()}>Try again</button></div> : users.length === 0 ? <div className="empty-state"><div className="empty-icon"><Users size={20} /></div><strong>{search || role !== "all" || status !== "all" ? "No matching accounts" : "No accounts yet"}</strong><p>{search || role !== "all" || status !== "all" ? "Try changing your filters or search terms." : "Create an account to get started."}</p>{!previewMode && !search && role === "all" && status === "all" && <button className="button primary" style={{ marginTop: 14 }} onClick={openCreate}><Plus size={15} />Create account</button>}</div> : <>
         <div className="table-scroll"><table className="user-table"><thead><tr><th>User</th><th>Role</th><th>Position / department</th><th>Status</th><th>Created</th><th>Last sign in</th><th aria-label="Actions" /></tr></thead><tbody>
-          {users.map((user) => <tr key={user.id}><td><div className="user-cell"><span className="user-avatar">{initials(user.full_name, user.email)}</span><span><span className="user-name">{user.full_name || "Unnamed user"}</span><span className="user-email">{user.email}</span></span></div></td>
+          {users.map((user) => <tr key={user.id}><td><div className="user-cell"><span className="user-avatar">{initials(user.full_name, user.email)}</span><span><span className="user-name">{user.full_name || "Unnamed user"}</span><span className="user-email"><small className="user-email-label">Email</small>{user.email}</span></span></div></td>
             <td><span className={`role-pill ${user.role}`}>{roleName(user.role)}</span></td><td>{user.position || user.department ? [user.position, user.department].filter(Boolean).join(" · ") : <span className="muted">—</span>}</td>
             <td><span className={`status-pill ${user.is_active ? "active" : "disabled"}`}><span className="status-dot" />{user.is_active ? "Active" : "Disabled"}</span></td>
             <td>{dateText(user.created_at)}</td><td>{user.last_sign_in_at ? dateText(user.last_sign_in_at) : <span className="muted">Never</span>}</td>

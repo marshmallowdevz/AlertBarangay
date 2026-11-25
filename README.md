@@ -21,7 +21,7 @@ A standalone Next.js App Router module for administrators to create, edit, disab
 
    `SUPABASE_SECRET_KEY` is preferred; `SUPABASE_SERVICE_ROLE_KEY` is supported as a fallback. The privileged key is read only by server-only modules and must never use a `NEXT_PUBLIC_` prefix. Do not commit `.env.local`.
 
-3. In the Supabase SQL Editor, run [`supabase/migrations/202611230001_admin_user_management.sql`](supabase/migrations/202611230001_admin_user_management.sql), then [`supabase/migrations/202611250001_profiles_self_read_policy.sql`](supabase/migrations/202611250001_profiles_self_read_policy.sql).
+3. In the Supabase SQL Editor, run [`supabase/migrations/202611230001_admin_user_management.sql`](supabase/migrations/202611230001_admin_user_management.sql), then [`supabase/migrations/202611250001_profiles_self_read_policy.sql`](supabase/migrations/202611250001_profiles_self_read_policy.sql), [`supabase/migrations/202611250002_admin_announcements_notifications.sql`](supabase/migrations/202611250002_admin_announcements_notifications.sql), [`supabase/migrations/202611250003_profile_photos.sql`](supabase/migrations/202611250003_profile_photos.sql), and [`supabase/migrations/202611250004_maintenance_mode.sql`](supabase/migrations/202611250004_maintenance_mode.sql).
 4. Create the first user under **Authentication → Users** in Supabase, or use the Auth Admin API. Then promote that user's UUID in the SQL Editor:
 
    ```sql
@@ -45,6 +45,12 @@ A standalone Next.js App Router module for administrators to create, edit, disab
 ## Security and RLS
 
 All `/api/admin/users` operations independently validate the cookie-backed Supabase session, then require an active `admin` profile before using the service-role client. The admin client is isolated in `src/lib/supabase/admin.ts`, marked `server-only`, and never passed to client components. Client bundles use only `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
+
+Admin announcements are stored in `public.announcements`. Connected authenticated dashboards can read rows where `is_published = true`; only the admin server routes can manage announcement records. `public.admin_notifications` stores profile creation and announcement publication activity for the admin notification menu and is delivered through Supabase Realtime. `public.admin_notification_reads` tracks read state independently for each admin. Set `NEXT_PUBLIC_SUPPORT_EMAIL` to the barangay's support mailbox; if it is unset, Settings uses the signed-in administrator email.
+
+Profile pictures are stored in the public `profile-photos` Storage bucket. Authenticated users can upload and replace images only in their own user-ID folder; old images are removed after a successful replacement. The Edit Profile menu accepts JPG, PNG, or WebP images up to 3 MB.
+
+Site-wide maintenance mode is controlled from **Settings → Maintenance mode**. When enabled, the proxy redirects public, resident, and official pages to a 503 maintenance screen; non-admin API requests also receive 503 responses. Admins can still sign in and access admin pages to disable maintenance. Anonymous/authenticated database reads expose only the maintenance flag and public message; admin update metadata is not readable by clients.
 
 RLS is enabled on `profiles` and `audit_logs`. Authenticated users can read their own profile and update only their own `full_name`; active administrators can read profiles and audit history. No browser role assignment or audit write policy is granted. The service-role API handlers perform account mutations and audit writes on the server.
 
