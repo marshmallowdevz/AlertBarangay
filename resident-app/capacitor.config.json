@@ -1,5 +1,9 @@
 {
   "appId": "com.alertbarangay.app",
   "appName": "AlertBarangay",
-  "webDir": "dist"
+  "webDir": "public",
+  "server": {
+    "url": "https://REPLACE-WITH-YOUR-DEPLOYED-ALERTBARANGAY-URL",
+    "cleartext": false
+  }
 }

@@ -99,20 +99,48 @@ async function resolveStoredMedia(supabase, bucket, items) {
     .map(normalizeStoragePath)
     .filter(Boolean))];
   const signedUrls = new Map();
+  const signingErrors = [];
+  let batchAvailable = false;
 
   if (mediaPaths.length) {
     try {
       const { data, error } = await supabase.storage.from(bucket).createSignedUrls(mediaPaths, 86400);
       if (error) throw error;
+      batchAvailable = Array.isArray(data);
       for (const [index, item] of (data || []).entries()) {
         const path = normalizeStoragePath(item?.path || mediaPaths[index]);
         const signedUrl = item?.signedUrl || item?.signedURL;
         if (path && signedUrl && !item?.error) signedUrls.set(path, signedUrl);
       }
     } catch (error) {
-      // Keep the rest of the feed visible if one private media object cannot be signed.
-      console.warn(`Unable to create signed URLs from the ${bucket} bucket.`, error);
+      signingErrors.push(error);
     }
+
+    const missingPaths = batchAvailable
+      ? mediaPaths.filter((path) => !signedUrls.has(path))
+      : [];
+    const retryResults = await Promise.all(missingPaths.map(async (path) => {
+      try {
+        const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 86400);
+        if (error) throw error;
+        const signedUrl = data?.signedUrl || data?.signedURL;
+        if (!signedUrl) throw new Error("Storage returned no signed URL.");
+        return { path, signedUrl };
+      } catch (error) {
+        return { path, error };
+      }
+    }));
+    for (const result of retryResults) {
+      if (result.signedUrl) signedUrls.set(result.path, result.signedUrl);
+      else signingErrors.push(result.error);
+    }
+  }
+
+  if (signingErrors.length) {
+    console.warn(
+      `Could not create signed URLs for ${signingErrors.length} media item(s) in the ${bucket} bucket.`,
+      signingErrors[0],
+    );
   }
 
   return items.map((post) => {
@@ -158,8 +186,28 @@ export function resolveCommunityPosts(supabase, posts) {
   return resolveStoredMedia(supabase, BUCKET, posts);
 }
 
-export function resolveIncidentReports(supabase, incidents) {
-  return resolveStoredMedia(supabase, 'incident-media', incidents);
+export async function resolveIncidentReports(supabase, incidents, { userId, canReadAll = false } = {}) {
+  const canRead = (incident) =>
+    canReadAll
+    || Boolean(userId && incident.reporter_id
+      && String(incident.reporter_id).toLowerCase() === String(userId).toLowerCase());
+  const readableIncidents = incidents.filter(canRead);
+  const resolvedIncidents = await resolveStoredMedia(supabase, 'incident-media', readableIncidents);
+  const resolvedById = new Map(resolvedIncidents.map((incident) => [incident.id, incident]));
+
+  return incidents.map((incident) => {
+    const resolved = resolvedById.get(incident.id);
+    if (resolved) return resolved;
+    return {
+      ...incident,
+      media_path: null,
+      media_type: null,
+      media_paths: [],
+      media_types: [],
+      media_urls: [],
+      displayMediaUrl: '',
+    };
+  });
 }
 
 export async function removeCommunityMedia(supabase, path) {
