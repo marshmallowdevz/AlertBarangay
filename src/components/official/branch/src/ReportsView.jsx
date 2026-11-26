@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import './Official.css';
 import LoadingIndicator from './LoadingIndicator';
 import { supabase } from './supabaseClient';
+import { IncidentMedia } from '@/components/incident-media';
 
-const reportTypes = ['Medical', 'Fire', 'Rescue', 'Flooding', 'Power', 'Crime', 'Accident', 'Electrical Hazard', 'Garbage Collection', 'Road Damage', 'Water Problems', 'Other'];
+const reportTypes = ['Medical', 'Fire', 'Flooding', 'Crime', 'Accident', 'Electrical Hazard', 'Garbage Collection', 'Road Damage', 'Water Problems', 'Other'];
 const reportStatuses = ['Pending', 'Assigned', 'In progress', 'Monitoring', 'Resolved', 'Closed'];
 const reportSeverities = ['Low', 'Medium', 'High'];
 
@@ -94,6 +95,9 @@ export default function ReportsView({ reports, loading, error, onRetry, onMarkDo
             </summary>
             <p>{report.description}</p>
             <small>Reported by {report.author || 'Resident'} · {formatDate(report.created_at)}</small>
+            {report.media_path || report.media_paths?.length
+              ? <IncidentMedia incident={report} staffIncidentId={report.incidentId} />
+              : <p className="muted">No photo or video was attached to this report.</p>}
             {onMarkDone && !['Resolved', 'Closed'].includes(report.status) && (
               <div className="modal-actions">
                 <button

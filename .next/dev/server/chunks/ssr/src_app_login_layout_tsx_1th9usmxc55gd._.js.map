@@ -2,5 +2,5 @@
   "version": 3,
   "sources": [],
   "sections": [
-    {"offset": {"line": 4, "column": 0}, "map": {"version":3,"sources":["file:///E:/DOWNLOADS/larp/AlertBarangay/src/app/login/layout.tsx"],"sourcesContent":["import type { Metadata } from \"next\";\r\n\r\nexport const metadata: Metadata = { title: \"Sign in\" };\r\n\r\nexport default function LoginLayout({ children }: Readonly<{ children: React.ReactNode }>) {\r\n  return children;\r\n}\r\n"],"names":["metadata","title","LoginLayout","children"],"mappings":";;;;;;AAEO,MAAMA,WAAqB;IAAEC,OAAO;AAAU;AAEtC,SAASC,YAAY,EAAEC,QAAQ,EAA2C;IACvF,OAAOA;AACT"}}]
+    {"offset": {"line": 4, "column": 0}, "map": {"version":3,"sources":["file:///C:/Users/Aleyah/Documents/GitHub/ZAMDevs/AlertBarangay/src/app/login/layout.tsx"],"sourcesContent":["import type { Metadata } from \"next\";\r\n\r\nexport const metadata: Metadata = { title: \"Sign in\" };\r\n\r\nexport default function LoginLayout({ children }: Readonly<{ children: React.ReactNode }>) {\r\n  return children;\r\n}\r\n"],"names":["metadata","title","LoginLayout","children"],"mappings":";;;;;;AAEO,MAAMA,WAAqB;IAAEC,OAAO;AAAU;AAEtC,SAASC,YAAY,EAAEC,QAAQ,EAA2C;IACvF,OAAOA;AACT"}}]
 }

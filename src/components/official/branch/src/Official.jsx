@@ -264,12 +264,18 @@ function Official({ user, staffRole = '', onSignOut }) {
     if (!isConfigured) return () => { active = false; };
 
     const refreshReports = () => listReports()
-      .then((rows) => { if (active) setOperationalData((current) => ({ ...current, reports: rows })); })
+      .then((rows) => {
+        if (!active) return;
+        setOperationalData((current) => ({ ...current, reports: rows }));
+        setReportsError('');
+      })
       .catch((error) => {
         console.error('Unable to load shared reports.', error);
         if (active) setReportsError(error.message || 'Incident reports could not be loaded.');
       })
       .finally(() => { if (active) setReportsLoading(false); });
+
+    void refreshReports();
 
     listDispatches()
       .then((dispatches) => { if (active) { setOperationalData((current) => ({ ...current, dispatches })); setDispatchesError(''); } })

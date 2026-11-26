@@ -19,6 +19,8 @@ export type Incident = {
   status: IncidentStatus;
   media_path: string | null;
   media_type: "image" | "video" | null;
+  media_paths?: string[];
+  media_types?: Array<"image" | "video">;
   reporter_id: string | null;
   created_at: string;
   updated_at: string;

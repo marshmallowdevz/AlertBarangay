@@ -140,7 +140,7 @@ export function OfficialDashboard() {
                   {reporter && <span><UserRound size={11} /> {reporter}</span>}
                 </div>
                 <div className="incident-actions">
-                  <IncidentMedia incident={item} />
+                  <IncidentMedia incident={item} staffIncidentId={item.id} />
                   {item.status === "pending" && <button type="button" className="button primary small-button" disabled={updating === item.id} onClick={() => void setStatus(item, "responding")}><Truck size={14} />Mark responding</button>}
                   {item.status !== "resolved" && <button type="button" className="button secondary small-button" disabled={updating === item.id} onClick={() => void setStatus(item, "resolved")}><CheckCircle2 size={14} />Mark resolved</button>}
                   {item.status === "resolved" && <button type="button" className="button secondary small-button" disabled={updating === item.id} onClick={() => void setStatus(item, "responding")}><RotateCcw size={14} />Reopen</button>}
