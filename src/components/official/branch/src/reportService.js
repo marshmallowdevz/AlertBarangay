@@ -37,7 +37,6 @@ function toReport(row) {
     time: new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(row.created_at)),
     dispatchHistory: [],
     // Kept for the live map and report messages.
-    incidentId: row.id,
     rawType: row.type,
     rawStatus: row.status,
     lat: row.lat != null ? Number(row.lat) : null,
@@ -57,6 +56,8 @@ export async function listReports() {
       // available columns so older databases still load reports successfully.
       .select('*')
       .order('created_at', { ascending: false })
+      // Newest 500 keep the dashboard, map and search fast as reports pile up.
+      .limit(500)
       .abortSignal(controller.signal);
     if (error) {
       if (controller.signal.aborted) throw new Error('Incident reports timed out. Check your connection and retry.');

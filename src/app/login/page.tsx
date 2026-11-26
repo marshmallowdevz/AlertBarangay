@@ -243,10 +243,14 @@ export default function LoginPage() {
       }
       // The chosen tab must match the account's real role (from profiles.role).
       // Wrong portal: sign straight back out and say which tab to use.
-      const selectedPortal = window.matchMedia("(max-width: 900px)").matches ? "resident" : portal;
-      if (!portalAllowsRole(selectedPortal, result.role)) {
+      // On phones and small tablets the tabs are hidden (see login.css), so
+      // there is no tab to match: every account goes to its own dashboard.
+      // Forcing the resident tab there used to lock officials out with a
+      // message pointing at a tab they couldn't see.
+      const tabsHidden = window.matchMedia("(max-width: 900px)").matches;
+      if (!tabsHidden && !portalAllowsRole(portal, result.role)) {
         await supabase.auth.signOut();
-        setMessage({ kind: "error", text: wrongPortalMessage(selectedPortal, result.role) });
+        setMessage({ kind: "error", text: wrongPortalMessage(portal, result.role) });
         return;
       }
       setRedirecting(true);
