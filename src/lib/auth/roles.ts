@@ -10,6 +10,16 @@ export const roleDashboardPaths: Record<AppRole, string> = {
 /** The two sign-in tabs on /login. Admins sign in through the staff (official) tab. */
 export type PortalChoice = "resident" | "official";
 
+/**
+ * Text shown on each sign-in tab. The resident portal's tab is labeled
+ * "Admin" at the product owner's request; every message that names a tab
+ * reads from here so the wording always matches what is on screen.
+ */
+export const portalLabels: Record<PortalChoice, string> = {
+  resident: "Admin",
+  official: "Barangay Official",
+};
+
 export const portalRoles: Record<PortalChoice, readonly AppRole[]> = {
   resident: ["resident"],
   official: ["official", "admin"],
@@ -40,10 +50,9 @@ export function portalAllowsRole(portal: PortalChoice, role: AppRole) {
 
 /** The message shown when someone signs in through the wrong tab. */
 export function wrongPortalMessage(portal: PortalChoice, role: AppRole) {
-  if (portal === "resident") {
-    return `This is a ${roleLabels[role]} account. Please sign in using the Barangay Official tab.`;
-  }
-  return "This is a Resident account. Please sign in using the Resident tab.";
+  const rightTab = (Object.keys(portalRoles) as PortalChoice[]).find((choice) => portalAllowsRole(choice, role));
+  const tab = rightTab ? portalLabels[rightTab] : portalLabels[portal === "resident" ? "official" : "resident"];
+  return `This is a ${roleLabels[role]} account, so it can't sign in with the ${portalLabels[portal]} tab. Please choose the ${tab} tab instead.`;
 }
 
 function inArea(pathname: string, area: string) {

@@ -381,3 +381,5 @@ html[data-theme="dark"] .assistant-bubble.user{background:#6a2a3d}
   .assistant-panel{right:0;left:0;bottom:0;width:100%;height:min(88dvh,620px);border-radius:18px 18px 0 0}
   .assistant-send span{display:none}
 }
+/* Leave room under the resident dashboard so the chat button never covers the last card. */
+.role-shell:has(.assistant-fab) .role-main,.role-shell:has(.assistant-panel) .role-main{padding-bottom:96px}

@@ -1,5 +1,7 @@
 -- Resident-only public sign-up and role-based row access.
--- Safe to re-run. Apply after 202611260001_incident_dispatch_history.sql.
+-- Safe to re-run. Apply after 202611260001_incident_dispatch_history.sql
+-- (and after 20261124160956_incidents_multiple_media.sql and
+-- 20261125011318_shared_report_progress_access.sql, whose rules it keeps).
 --
 -- What this enforces at the database level (the UI and proxy also check, but
 -- the database is the last line of defence):
@@ -8,8 +10,9 @@
 --      {"role": "admin"}) can change that.
 --   2. Only the trusted server (service role, used by the Admin dashboard's
 --      user-management API) can turn an account into an official or admin.
---   3. Residents can read and create only their own incident reports; staff
---      (active officials/admins) can read all of them.
+--   3. Only active resident accounts can file incident reports, and only as
+--      themselves. Reading reports is unchanged: the resident app's shared
+--      map and feed still show recent incidents to every signed-in user.
 
 set search_path = public, pg_catalog;
 
@@ -54,11 +57,8 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created after insert on auth.users
 for each row execute function public.handle_new_auth_user();
 
--- Browsers can never insert profiles or change role / is_active (re-asserted
--- here in case an older migration or dashboard tweak re-granted it).
-revoke insert, delete on public.profiles from anon, authenticated;
-revoke update on public.profiles from anon, authenticated;
-grant update (full_name, avatar_url) on public.profiles to authenticated;
+-- Browser access to profiles (insert only as a resident, update only name and
+-- photo) is already locked down by 202611250005 and 20261125011318.
 
 -- ---------------------------------------------------------------------------
 -- 2. Role helpers for RLS policies
@@ -82,19 +82,14 @@ revoke all on function public.is_active_resident() from public;
 grant execute on function public.is_active_resident() to authenticated;
 
 -- ---------------------------------------------------------------------------
--- 3. Incidents: residents see their own reports, staff see everything
+-- 3. Incidents: only active residents file reports
 -- ---------------------------------------------------------------------------
+-- Same rule as 20261124160956_incidents_multiple_media.sql (own reporter_id,
+-- pending status, every attachment inside the caller's own folder), plus the
+-- caller must be an active resident account.
 do $$
 begin
   if to_regclass('public.incidents') is not null then
-    -- Previously every signed-in account could read every report.
-    drop policy if exists "Authenticated users can view incidents" on public.incidents;
-    drop policy if exists "Reporters and staff can view incidents" on public.incidents;
-    create policy "Reporters and staff can view incidents"
-      on public.incidents for select to authenticated
-      using (reporter_id = (select auth.uid()) or public.is_active_staff());
-
-    -- Only active resident accounts file reports, and only as themselves.
     drop policy if exists "Residents can report incidents for themselves" on public.incidents;
     create policy "Residents can report incidents for themselves"
       on public.incidents for insert to authenticated
@@ -103,6 +98,11 @@ begin
         and public.is_active_resident()
         and status = 'pending'
         and (media_path is null or media_path like ((select auth.uid())::text || '/%'))
+        and not exists (
+          select 1
+          from unnest(media_paths) as attachment(path)
+          where attachment.path not like ((select auth.uid())::text || '/%')
+        )
       );
   end if;
 end;

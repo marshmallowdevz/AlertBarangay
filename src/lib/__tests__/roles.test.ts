@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getRequiredRole, getRoleDashboardPath, isAppRole, portalAllowsRole, wrongPortalMessage } from "@/lib/auth/roles";
+import { getRequiredRole, getRoleDashboardPath, isAppRole, portalAllowsRole, portalLabels, wrongPortalMessage } from "@/lib/auth/roles";
 
 describe("roles", () => {
   it("sends each role to its own dashboard", () => {
@@ -26,7 +26,7 @@ describe("roles", () => {
     expect(getRequiredRole("/login")).toBeNull();
   });
 
-  it("only lets residents through the Resident tab", () => {
+  it("only lets residents through the resident portal tab", () => {
     expect(portalAllowsRole("resident", "resident")).toBe(true);
     expect(portalAllowsRole("resident", "official")).toBe(false);
     expect(portalAllowsRole("resident", "admin")).toBe(false);
@@ -38,8 +38,14 @@ describe("roles", () => {
     expect(portalAllowsRole("official", "resident")).toBe(false);
   });
 
-  it("explains which tab to use", () => {
-    expect(wrongPortalMessage("resident", "official")).toContain("Barangay Official tab");
-    expect(wrongPortalMessage("official", "resident")).toContain("Resident tab");
+  it("names the tabs exactly as they are labeled on screen", () => {
+    expect(portalLabels).toEqual({ resident: "Admin", official: "Barangay Official" });
+    expect(wrongPortalMessage("resident", "official")).toBe(
+      "This is a Barangay Official account, so it can't sign in with the Admin tab. Please choose the Barangay Official tab instead.",
+    );
+    expect(wrongPortalMessage("resident", "admin")).toContain("choose the Barangay Official tab");
+    expect(wrongPortalMessage("official", "resident")).toBe(
+      "This is a Resident account, so it can't sign in with the Barangay Official tab. Please choose the Admin tab instead.",
+    );
   });
 });

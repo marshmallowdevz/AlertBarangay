@@ -11,10 +11,11 @@ export type DashboardResult = { ok: true; role: AppRole; destination: string } |
 export async function dashboardForUser(supabase: SupabaseClient, userId: string): Promise<DashboardResult> {
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("id, role")
+    .select("id, role, is_active")
     .eq("id", userId)
     .maybeSingle();
   if (error) return { ok: false, message: "We couldn't read your account role. Please try again in a moment." };
+  if (profile?.is_active === false) return { ok: false, message: "This account has been disabled. Contact your barangay administrator." };
   const role = profile?.role;
   const destination = getRoleDashboardPath(role);
   if (!isAppRole(role) || !destination) return { ok: false, message: "This account has no role yet. Contact your barangay administrator." };

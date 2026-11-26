@@ -4,16 +4,18 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { LoadingButton } from "@/components/ui/loading-button";
 import { dashboardForUser } from "@/lib/auth/dashboard-for-user";
-import { portalAllowsRole, wrongPortalMessage, type PortalChoice } from "@/lib/auth/roles";
+import { portalAllowsRole, portalLabels, wrongPortalMessage, type PortalChoice } from "@/lib/auth/roles";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { toast } from "@/lib/ui/toast";
 import "./login.css";
 
 type Screen = "landing" | "auth";
 type Mode = "sign-in" | "sign-up" | "reset";
-// Two sign-in tabs: Resident, and Barangay Official (staff). Admin accounts
-// sign in through the Barangay Official tab. The account's real role in
-// public.profiles must match the tab, otherwise sign-in is refused.
+// Two sign-in tabs (labels in portalLabels): the resident portal, labeled
+// "Admin", and Barangay Official (staff). Admin accounts sign in through the
+// Barangay Official tab. The account's real role in public.profiles must
+// match the tab, otherwise sign-in is refused with a message naming the
+// right tab.
 type Message = { kind: "error" | "success"; text: string } | null;
 
 // Requests that hang longer than this show a timeout message instead of spinning forever.
@@ -216,9 +218,14 @@ export default function LoginPage() {
 
       const { data, error } = await withTimeout(supabase.auth.signInWithPassword({ email: cleanEmail, password }));
       if (error || !data.user) {
-        const text = error?.status === 0 ? "We couldn't reach the sign-in service. Check your connection." : "Wrong email or password.";
+        const text = error?.status === 0
+          ? "We couldn't reach the sign-in service. Check your connection."
+          : error?.code === "user_banned"
+            ? "This account has been disabled. Contact your barangay administrator."
+            : error?.code === "email_not_confirmed"
+              ? "Please confirm your email first. Check your inbox for the confirmation link."
+              : "Wrong email or password.";
         setMessage({ kind: "error", text });
-        if (error?.status === 0) toast.error(text);
         return;
       }
       const result = await withTimeout(dashboardForUser(supabase, data.user.id));
@@ -231,9 +238,7 @@ export default function LoginPage() {
       // Wrong portal: sign straight back out and say which tab to use.
       if (!portalAllowsRole(portal, result.role)) {
         await supabase.auth.signOut();
-        const text = wrongPortalMessage(portal, result.role);
-        setMessage({ kind: "error", text });
-        toast.error(text);
+        setMessage({ kind: "error", text: wrongPortalMessage(portal, result.role) });
         return;
       }
       setRedirecting(true);
@@ -246,7 +251,6 @@ export default function LoginPage() {
           ? "You appear to be offline. Check your connection and try again."
           : "Something went wrong. Check your connection and try again.";
       setMessage({ kind: "error", text });
-      toast.error(text);
     } finally {
       setBusy(false);
     }
@@ -300,8 +304,10 @@ export default function LoginPage() {
         <form onSubmit={(event) => void submit(event)} noValidate>
           {mode === "sign-in" && <fieldset className="roles">
             <legend>I am signing in as</legend>
-            <label><input type="radio" name="role" value="resident" checked={portal === "resident"} onChange={() => choosePortal("resident")} /><span className="chip">Resident</span></label>
-            <label><input type="radio" name="role" value="official" checked={portal === "official"} onChange={() => choosePortal("official")} /><span className="chip">Barangay Official</span></label>
+            {(Object.keys(portalLabels) as PortalChoice[]).map((choice) => <label key={choice}>
+              <input type="radio" name="role" value={choice} checked={portal === choice} onChange={() => choosePortal(choice)} disabled={busy || redirecting} />
+              <span className="chip">{portalLabels[choice]}</span>
+            </label>)}
           </fieldset>}
 
           {signingUp && <div className="field">

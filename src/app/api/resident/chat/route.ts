@@ -32,6 +32,10 @@ const usage = new Map<string, number[]>();
 
 function rateLimited(userId: string) {
   const now = Date.now();
+  // Forget idle users now and then so the map can't grow without limit.
+  if (usage.size > 500) {
+    for (const [id, times] of usage) if (!times.some((time) => now - time < WINDOW_MS)) usage.delete(id);
+  }
   const recent = (usage.get(userId) ?? []).filter((time) => now - time < WINDOW_MS);
   if (recent.length >= MAX_REQUESTS_PER_WINDOW) {
     usage.set(userId, recent);
