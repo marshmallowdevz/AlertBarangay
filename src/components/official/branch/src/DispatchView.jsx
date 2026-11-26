@@ -12,10 +12,9 @@ const responseTypes = [
   'CCDRRMO',
 ];
 
-export default function DispatchView({ reports, dispatches, dispatchesError, onDispatch }) {
+export default function DispatchView({ reports, dispatches, dispatchesError, responseType, onResponseTypeChange, onDispatch }) {
   const dispatchableReports = reports.filter((report) => !['Resolved', 'Closed'].includes(report.status));
   const [reportId, setReportId] = useState(dispatchableReports[0]?.id ?? '');
-  const [responseType, setResponseType] = useState(responseTypes[0]);
   const [note, setNote] = useState('');
   const [formError, setFormError] = useState('');
   const [confirmation, setConfirmation] = useState('');
@@ -59,7 +58,7 @@ export default function DispatchView({ reports, dispatches, dispatchesError, onD
             <label>Report<select value={selectedReportId} onChange={(event) => setReportId(event.target.value)} required>
               {dispatchableReports.map((report) => <option key={report.id} value={report.id}>{report.description || report.type} · {report.type} · {report.location}</option>)}
             </select></label>
-            <label>Response type<select value={responseType} onChange={(event) => setResponseType(event.target.value)} required>
+            <label>Response type<select value={responseType} onChange={(event) => onResponseTypeChange(event.target.value)} required>
               {responseTypes.map((type) => <option key={type}>{type}</option>)}
             </select></label>
             <label>Dispatch note (optional)<textarea rows="4" maxLength={500} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Add instructions for the responding team" /></label>

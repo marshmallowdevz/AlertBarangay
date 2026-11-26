@@ -31,7 +31,7 @@ export default function OverviewView({ onNavigate, contacts, onManageContacts, r
         <div className="card-head"><h2>{icon('response')} Response types</h2><button type="button" className="link-btn" onClick={() => onNavigate('dispatch')}>Open dispatch</button></div>
         <div className="type-grid">
           {responseTypes.map((label) => (
-            <button key={label} type="button" className="type-tile" onClick={() => onNavigate('dispatch')}>
+            <button key={label} type="button" className="type-tile" onClick={() => onNavigate('dispatch', label)}>
               <span>{label}</span>
             </button>
           ))}

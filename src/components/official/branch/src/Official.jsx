@@ -90,6 +90,7 @@ function mergeAnnouncements(current, incoming) {
 
 function Official({ user, onSignOut }) {
   const [activeNav, setActiveNav] = useState('overview');
+  const [dispatchResponseType, setDispatchResponseType] = useState('Fire');
   const [operationalData, setOperationalData] = useState({
     reports: [],
     residents: initialResidents,
@@ -503,7 +504,10 @@ function Official({ user, onSignOut }) {
   // Announcements are managed through the administrator routes in the current app.
   const canManageAnnouncements = false;
 
-  const navigateTo = (view) => setActiveNav(view);
+  const navigateTo = (view, responseType) => {
+    if (responseType) setDispatchResponseType(responseType);
+    setActiveNav(view);
+  };
 
   const replyToConversation = (conversationId, body) => {
     const sentAt = new Date().toISOString();
@@ -736,7 +740,7 @@ function Official({ user, onSignOut }) {
             />
           )}
           {activeNav === 'dispatch' && (
-            <DispatchView reports={operationalData.reports} dispatches={operationalData.dispatches} dispatchesError={dispatchesError} onDispatch={dispatchResponse} />
+            <DispatchView reports={operationalData.reports} dispatches={operationalData.dispatches} dispatchesError={dispatchesError} responseType={dispatchResponseType} onResponseTypeChange={setDispatchResponseType} onDispatch={dispatchResponse} />
           )}
           {activeNav === 'residents' && <ResidentsView residents={operationalData.residents} />}
           {activeNav === 'messages' && (

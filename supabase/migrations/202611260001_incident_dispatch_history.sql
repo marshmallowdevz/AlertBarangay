@@ -25,12 +25,14 @@ create policy "Active staff can read incident dispatches"
   on public.incident_dispatches for select to authenticated
   using (public.is_active_staff());
 
--- Remove the earlier server-supplied actor signature if this migration was
--- trialed before the actor was bound to auth.uid().
+-- Replace either earlier RPC signature so the installed function matches the
+-- API route's server-validated actor parameter.
+drop function if exists public.dispatch_incident_response(uuid, text, text);
 drop function if exists public.dispatch_incident_response(uuid, uuid, text, text);
 
 create or replace function public.dispatch_incident_response(
   p_incident_id uuid,
+  p_actor_id uuid,
   p_response_type text,
   p_note text default ''
 )
@@ -41,15 +43,14 @@ set search_path = public, pg_catalog
 as $$
 declare
   saved_dispatch public.incident_dispatches;
-  actor_id uuid := auth.uid();
 begin
-  if actor_id is null then
-    raise exception 'Authentication is required.' using errcode = '42501';
+  if p_actor_id is null then
+    raise exception 'An authenticated staff user is required.' using errcode = '42501';
   end if;
 
   if not exists (
     select 1 from public.profiles
-    where id = actor_id and role in ('admin', 'official') and is_active = true
+    where id = p_actor_id and role in ('admin', 'official') and is_active = true
   ) then
     raise exception 'Active staff access is required.' using errcode = '42501';
   end if;
@@ -69,15 +70,15 @@ begin
   end if;
 
   insert into public.incident_dispatches (incident_id, response_type, note, dispatched_by)
-  values (p_incident_id, p_response_type, coalesce(p_note, ''), actor_id)
+  values (p_incident_id, p_response_type, coalesce(p_note, ''), p_actor_id)
   returning * into saved_dispatch;
 
   return saved_dispatch;
 end;
 $$;
 
-revoke all on function public.dispatch_incident_response(uuid, text, text) from public, anon;
-grant execute on function public.dispatch_incident_response(uuid, text, text) to authenticated;
+revoke all on function public.dispatch_incident_response(uuid, uuid, text, text) from public, anon, authenticated;
+grant execute on function public.dispatch_incident_response(uuid, uuid, text, text) to service_role;
 
 do $$
 begin
@@ -92,3 +93,5 @@ begin
   end if;
 end;
 $$;
+
+notify pgrst, 'reload schema';
