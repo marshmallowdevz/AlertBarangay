@@ -36,6 +36,12 @@ function toReport(row) {
     media_types: Array.isArray(row.media_types) ? row.media_types : [],
     time: new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(row.created_at)),
     dispatchHistory: [],
+    // Kept for the live map and report messages.
+    incidentId: row.id,
+    rawType: row.type,
+    rawStatus: row.status,
+    lat: row.lat != null ? Number(row.lat) : null,
+    lng: row.lng != null ? Number(row.lng) : null,
   };
 }
 

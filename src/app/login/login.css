@@ -180,3 +180,16 @@
 .ab-login.reset-page { display: grid; place-items: center; grid-template-columns: 1fr; background: var(--bg); }
 .ab-login.reset-page > .sign-in-panel { padding-bottom: 32px; }
 .ab-login a.submit { text-decoration: none; }
+
+/* Sign-in tabs (Resident / Barangay Official) must stay visible on phones:
+   the chosen tab now decides which accounts may sign in. */
+.ab-login[data-auth-mode="sign-in"] .roles { display: grid; }
+.ab-login .official-note span { display: block; max-width: 340px; margin: 0 auto; text-align: center; font-size: 13px; line-height: 1.5; opacity: .85; }
+.ab-login .submit.is-loading { cursor: wait; opacity: .85; transform: none; }
+.ab-login .submit:disabled { cursor: wait; }
+
+/* Language picker on the sign-in screens */
+.ab-login{position:relative}
+.ab-login .login-lang{position:absolute;top:14px;right:14px;z-index:20;background:#ffffff14;color:#f6dde5;border-color:#ffffff33;backdrop-filter:blur(6px)}
+.ab-login .login-lang select option{color:#231815;background:#fff}
+.ab-login .login-lang:focus-within{outline-color:#d4a843}

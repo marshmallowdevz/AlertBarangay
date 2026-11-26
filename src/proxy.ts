@@ -40,7 +40,8 @@ export async function proxy(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   const pathname = request.nextUrl.pathname;
   const requiredRole = getRequiredRole(pathname);
-  const isEntryRoute = pathname === "/" || pathname === "/login";
+  // Entry routes send a signed-in user straight to their own role dashboard.
+  const isEntryRoute = pathname === "/" || pathname === "/login" || pathname === "/dashboard";
 
   const redirectTo = (path: string) => {
     const redirectResponse = NextResponse.redirect(new URL(path, request.url));
@@ -81,7 +82,7 @@ export async function proxy(request: NextRequest) {
   }
 
   if (!user) {
-    if (requiredRole) return redirectTo("/login");
+    if (requiredRole) return redirectTo("/login?notice=signin");
     return response;
   }
 
@@ -91,19 +92,22 @@ export async function proxy(request: NextRequest) {
   try {
     resolution = await resolveAppRole(supabase, user.id);
   } catch {
-    if (requiredRole) return redirectTo("/login");
+    if (requiredRole) return redirectTo("/login?notice=unavailable");
     return response;
   }
 
   if (!resolution.ok) {
-    if (requiredRole) return redirectTo("/login");
+    if (requiredRole || pathname === "/dashboard") return redirectTo("/login?notice=role");
     return response;
   }
 
   if (isEntryRoute) return redirectTo(resolution.destination);
-  if (requiredRole && resolution.role !== requiredRole) return redirectTo(resolution.destination);
+  // Role-based route protection: a resident can never open /official/* or
+  // /admin/*, an official can never open /resident/* or /admin/*, and so on.
+  // They land on their own dashboard with a short explanation instead.
+  if (requiredRole && resolution.role !== requiredRole) return redirectTo(`${resolution.destination}?notice=forbidden`);
 
   return response;
 }
 
-export const config = { matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"] };
+export const config = { matcher: ["/((?!_next/static|_next/image|favicon.ico|sw.js|manifest.webmanifest|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"] };

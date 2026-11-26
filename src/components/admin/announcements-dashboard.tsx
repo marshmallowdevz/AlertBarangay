@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { errorMessage, fetchJson } from "@/lib/fetch-json";
 import { Bell, CircleAlert, Edit3, Plus, Send, Trash2, X } from "lucide-react";
+import { LoadingButton } from "@/components/ui/loading-button";
 
 type Announcement = { id: string; title: string; body: string; is_published: boolean; created_at: string; updated_at: string; published_at: string | null };
 type Draft = { title: string; body: string; is_published: boolean };
@@ -81,7 +82,7 @@ export function AnnouncementsDashboard() {
     {formOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeForm(); }}><section className="modal announcement-modal" role="dialog" aria-modal="true" aria-labelledby="announcement-dialog-title"><form onSubmit={(event) => void save(event)}>
       <div className="modal-head"><div><h2 id="announcement-dialog-title">{editing ? "Edit announcement" : "New announcement"}</h2><p>Write a clear update for the community.</p></div><button type="button" className="close-button" onClick={closeForm} aria-label="Close"><X size={17} /></button></div>
       <div className="modal-body announcement-form"><label className="field"><span>Title</span><input required maxLength={180} value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="e.g. Barangay assembly schedule" /></label><label className="field"><span>Announcement</span><textarea required maxLength={10000} rows={7} value={draft.body} onChange={(event) => setDraft({ ...draft, body: event.target.value })} placeholder="Share the details residents need to know…" /></label><label className="publish-check"><input type="checkbox" checked={draft.is_published} onChange={(event) => setDraft({ ...draft, is_published: event.target.checked })} /><span><strong>Publish now</strong><small>Make this announcement available to connected dashboards.</small></span></label>{error && <div className="inline-error">{error}</div>}</div>
-      <div className="modal-foot"><button type="button" className="button secondary" onClick={closeForm} disabled={saving}>Cancel</button><button className="button primary" disabled={saving}>{saving ? "Saving…" : editing ? "Save changes" : "Create announcement"}</button></div>
+      <div className="modal-foot"><button type="button" className="button secondary" onClick={closeForm} disabled={saving}>Cancel</button><LoadingButton className="button primary" loading={saving} loadingText={editing ? "Saving…" : "Publishing…"}>{editing ? "Save changes" : "Create announcement"}</LoadingButton></div>
     </form></section></div>}
   </div>;
 }

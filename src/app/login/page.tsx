@@ -2,24 +2,46 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { LoadingButton } from "@/components/ui/loading-button";
 import { dashboardForUser } from "@/lib/auth/dashboard-for-user";
+import { portalAllowsRole, portalLabels, wrongPortalMessage, type PortalChoice } from "@/lib/auth/roles";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { toast } from "@/lib/ui/toast";
+import { LanguageSwitcher } from "@/components/ui/language-switcher";
+import { useI18n } from "@/lib/i18n/provider";
+import type { MessageKey } from "@/lib/i18n/messages";
 import "./login.css";
 
 type Screen = "landing" | "auth";
 type Mode = "sign-in" | "sign-up" | "reset";
-// Admin is intentionally not offered: admins pick either chip and are still
-// routed to the admin dashboard, because routing uses profiles.role only.
-type PortalChoice = "resident" | "official";
+// Two sign-in tabs (labels in portalLabels): the resident portal, labeled
+// "Admin", and Barangay Official (staff). Admin accounts sign in through the
+// Barangay Official tab. The account's real role in public.profiles must
+// match the tab, otherwise sign-in is refused with a message naming the
+// right tab.
 type Message = { kind: "error" | "success"; text: string } | null;
 
-const portalCopy: Record<PortalChoice, { eyebrow: string; intro: string }> = {
-  resident: { eyebrow: "Resident portal", intro: "Sign in to report incidents and follow advisories." },
-  official: { eyebrow: "Barangay official portal", intro: "Sign in to manage reports and respond to incidents." },
+// Requests that hang longer than this show a timeout message instead of spinning forever.
+const AUTH_TIMEOUT_MS = 20_000;
+
+class AuthTimeoutError extends Error {}
+
+function withTimeout<T>(promise: Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new AuthTimeoutError()), AUTH_TIMEOUT_MS);
+    promise.then((value) => { window.clearTimeout(timer); resolve(value); }, (error) => { window.clearTimeout(timer); reject(error); });
+  });
+}
+
+const portalCopy: Record<PortalChoice, { eyebrow: MessageKey; intro: MessageKey }> = {
+  resident: { eyebrow: "login.portal.resident.eyebrow", intro: "login.portal.resident.intro" },
+  official: { eyebrow: "login.portal.official.eyebrow", intro: "login.portal.official.intro" },
 };
 
-const noticeMessages: Record<string, string> = {
-  role: "Your account doesn't have an active role yet. Contact your barangay administrator.",
+const noticeKeys: Record<string, MessageKey> = {
+  role: "login.notice.role",
+  signin: "login.notice.signin",
+  unavailable: "login.notice.unavailable",
 };
 
 function initialHash() {
@@ -47,11 +69,12 @@ function CardWaves() {
 function PasswordField({ id, label, value, onChange, autoComplete, show, onToggle }: {
   id: string; label: string; value: string; onChange: (value: string) => void; autoComplete: string; show: boolean; onToggle: () => void;
 }) {
+  const { t } = useI18n();
   return <div className="field">
     <label htmlFor={id}>{label}</label>
     <div className="password-wrap">
       <input id={id} type={show ? "text" : "password"} autoComplete={autoComplete} minLength={8} required value={value} onChange={(e) => onChange(e.target.value)} />
-      <button className="password-toggle" type="button" data-visible={show} aria-label={show ? "Hide password" : "Show password"} aria-pressed={show} onClick={onToggle}>
+      <button className="password-toggle" type="button" data-visible={show} aria-label={show ? t("login.hidePassword") : t("login.showPassword")} aria-pressed={show} onClick={onToggle}>
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z" stroke="currentColor" strokeWidth="1.7" /><circle cx="12" cy="12" r="2.7" stroke="currentColor" strokeWidth="1.7" /><path className="eye-slash" d="m3 3 18 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
       </button>
     </div>
@@ -60,6 +83,7 @@ function PasswordField({ id, label, value, onChange, autoComplete, show, onToggl
 
 export default function LoginPage() {
   const router = useRouter();
+  const { t } = useI18n();
   const [checkingSession, setCheckingSession] = useState(true);
   // Read the #signin / #signup hash on first render. The first paint is the
   // "checking session" placeholder, so this cannot cause a hydration mismatch.
@@ -73,6 +97,8 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Keeps the button in its loading state while the dashboard loads after sign-in.
+  const [redirecting, setRedirecting] = useState(false);
   const [message, setMessage] = useState<Message>(null);
 
   // Already signed in (or refreshing while signed in)? Go straight to the right dashboard.
@@ -84,25 +110,32 @@ export default function LoginPage() {
       const supabase = createSupabaseBrowserClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        if (active && notice) setMessage({ kind: "error", text: noticeMessages[notice] ?? noticeMessages.role });
+        if (active && notice) setMessage({ kind: notice === "signin" ? "success" : "error", text: t(noticeKeys[notice] ?? noticeKeys.role) });
         return;
       }
       const result = await dashboardForUser(supabase, user.id);
       if (!active) return;
-      if (result.ok && !notice) {
+      if (result.ok && notice !== "role") {
         router.replace(result.destination);
         router.refresh();
         return;
       }
       // Signed in but a dashboard sent them back (no role or disabled): sign out cleanly.
       await supabase.auth.signOut();
-      if (active) setMessage({ kind: "error", text: result.ok ? (noticeMessages[notice!] ?? noticeMessages.role) : result.message });
+      if (active) setMessage({ kind: "error", text: result.ok ? t(noticeKeys[notice!] ?? noticeKeys.role) : result.message });
     }
 
     resume()
-      .catch(() => { if (active) setMessage({ kind: "error", text: "We couldn't check your session. Check your connection and try again." }); })
+      .catch(() => {
+        if (!active) return;
+        const text = t("login.err.session");
+        setMessage({ kind: "error", text });
+        toast.error(text);
+      })
       .finally(() => { if (active) setCheckingSession(false); });
     return () => { active = false; };
+    // Runs once on load; the message language is the one picked at that time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   // Follow #signin / #signup / #reset links clicked while already on this page.
@@ -128,6 +161,11 @@ export default function LoginPage() {
     window.history.replaceState(null, "", window.location.pathname);
   }
 
+  function choosePortal(next: PortalChoice) {
+    setPortal(next);
+    setMessage(null);
+  }
+
   function toggleMode() {
     openAuth(mode === "sign-in" ? "sign-up" : "sign-in");
     setPassword("");
@@ -139,8 +177,8 @@ export default function LoginPage() {
     setMessage(null);
     const cleanEmail = email.trim();
     if (mode === "reset") {
-      if (!cleanEmail) { setMessage({ kind: "error", text: "Enter the email address of your account." }); return; }
-    } else if (!cleanEmail || !password) { setMessage({ kind: "error", text: "Please enter your email and password." }); return; }
+      if (!cleanEmail) { setMessage({ kind: "error", text: t("login.err.enterEmail") }); return; }
+    } else if (!cleanEmail || !password) { setMessage({ kind: "error", text: t("login.err.enterBoth") }); return; }
 
     const supabase = createSupabaseBrowserClient();
     setBusy(true);
@@ -148,72 +186,101 @@ export default function LoginPage() {
       if (mode === "reset") {
         const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, { redirectTo: `${window.location.origin}/auth/reset` });
         // Same message either way, so this form cannot be used to discover which emails have accounts.
-        if (error && error.status === 0) { setMessage({ kind: "error", text: "We couldn't reach the sign-in service. Check your connection." }); return; }
-        setMessage({ kind: "success", text: "If an account exists for that email, a reset link is on its way. Open it on this device." });
+        if (error && error.status === 0) { setMessage({ kind: "error", text: t("login.err.unreachable") }); return; }
+        setMessage({ kind: "success", text: t("login.ok.resetSent") });
         return;
       }
       if (mode === "sign-up") {
-        if (fullName.trim().length < 2) { setMessage({ kind: "error", text: "Please enter your full name." }); return; }
-        if (password.length < 8) { setMessage({ kind: "error", text: "Use a password with at least 8 characters." }); return; }
-        if (password !== confirm) { setMessage({ kind: "error", text: "Passwords do not match." }); return; }
-        const { data, error } = await supabase.auth.signUp({
+        if (fullName.trim().length < 2) { setMessage({ kind: "error", text: t("login.err.fullName") }); return; }
+        if (password.length < 8) { setMessage({ kind: "error", text: t("login.err.passwordLength") }); return; }
+        if (password !== confirm) { setMessage({ kind: "error", text: t("login.err.passwordMatch") }); return; }
+        // Public sign-up only ever creates resident accounts. Only the name is
+        // sent; the database trigger assigns role = 'resident' and ignores any
+        // role a browser might try to smuggle into the sign-up metadata.
+        const { data, error } = await withTimeout(supabase.auth.signUp({
           email: cleanEmail,
           password,
           options: { data: { full_name: fullName.trim() }, emailRedirectTo: `${window.location.origin}/login` },
-        });
-        if (error) { setMessage({ kind: "error", text: error.message }); return; }
-        if (!data.session || !data.user) {
-          setMessage({ kind: "success", text: "Your account was created. Check your email for a confirmation link, then sign in." });
-          setMode("sign-in"); setPassword(""); setConfirm("");
+        }));
+        if (error) {
+          setMessage({ kind: "error", text: error.status === 0 ? t("login.err.unreachable") : error.message });
           return;
         }
-        const result = await dashboardForUser(supabase, data.user.id);
-        if (!result.ok) { setMessage({ kind: "error", text: result.message }); return; }
+        if (!data.session || !data.user) {
+          setMessage({ kind: "success", text: t("login.ok.created") });
+          setMode("sign-in"); setPortal("resident"); setPassword(""); setConfirm("");
+          return;
+        }
+        const result = await withTimeout(dashboardForUser(supabase, data.user.id));
+        if (!result.ok || result.role !== "resident") {
+          await supabase.auth.signOut();
+          setMessage({ kind: "error", text: result.ok ? t("login.err.residentsOnly") : result.message });
+          return;
+        }
+        toast.success(t("login.ok.welcome"));
         router.replace(result.destination);
         router.refresh();
         return;
       }
 
-      const { data, error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
+      const { data, error } = await withTimeout(supabase.auth.signInWithPassword({ email: cleanEmail, password }));
       if (error || !data.user) {
-        setMessage({ kind: "error", text: error?.status === 0 ? "We couldn't reach the sign-in service. Check your connection." : "Wrong email or password." });
+        const text = error?.status === 0
+          ? t("login.err.unreachable")
+          : error?.code === "user_banned"
+            ? t("login.err.disabled")
+            : error?.code === "email_not_confirmed"
+              ? t("login.err.unconfirmed")
+              : t("login.err.wrong");
+        setMessage({ kind: "error", text });
         return;
       }
-      const result = await dashboardForUser(supabase, data.user.id);
+      const result = await withTimeout(dashboardForUser(supabase, data.user.id));
       if (!result.ok) {
         await supabase.auth.signOut();
         setMessage({ kind: "error", text: result.message });
         return;
       }
-      // Route by the account's real role, whatever chip was highlighted.
+      // The chosen tab must match the account's real role (from profiles.role).
+      // Wrong portal: sign straight back out and say which tab to use.
+      if (!portalAllowsRole(portal, result.role)) {
+        await supabase.auth.signOut();
+        setMessage({ kind: "error", text: wrongPortalMessage(portal, result.role) });
+        return;
+      }
+      setRedirecting(true);
       router.replace(result.destination);
       router.refresh();
-    } catch {
-      setMessage({ kind: "error", text: "Something went wrong. Check your connection and try again." });
+    } catch (cause) {
+      const text = cause instanceof AuthTimeoutError
+        ? t("login.err.timeout")
+        : typeof navigator !== "undefined" && navigator.onLine === false
+          ? t("login.err.offline")
+          : t("login.err.generic");
+      setMessage({ kind: "error", text });
     } finally {
       setBusy(false);
     }
   }
 
   if (checkingSession) {
-    return <main className="ab-login is-landing" aria-busy="true"><p className="sr-only">Checking your session…</p></main>;
+    return <main className="ab-login is-landing" aria-busy="true"><p className="sr-only">{t("login.checking")}</p></main>;
   }
 
   const signingUp = mode === "sign-up";
   const resetting = mode === "reset";
   const copy = portalCopy[portal];
-  const heading = signingUp ? "Create Your Account" : resetting ? "Reset your password" : "Hello Welcome Back!";
-  const eyebrow = signingUp ? "Create your account" : resetting ? "Forgot password" : copy.eyebrow;
-  const intro = signingUp
-    ? "Sign-ups are for residents. Barangay official accounts are created by an administrator."
-    : resetting ? "Enter your email and we'll send you a link to choose a new password." : copy.intro;
+  const heading = signingUp ? t("login.heading.signUp") : resetting ? t("login.heading.reset") : t("login.heading.signIn");
+  const eyebrow = signingUp ? t("login.eyebrow.signUp") : resetting ? t("login.eyebrow.reset") : t(copy.eyebrow);
+  const intro = signingUp ? t("login.intro.signUp") : resetting ? t("login.intro.reset") : t(copy.intro);
 
   return <main className={`ab-login ${screen === "auth" ? "is-auth" : "is-landing"}`} data-auth-mode={screen === "auth" ? mode : undefined}>
+    <LanguageSwitcher className="login-lang" />
     <section className="landing-screen" aria-label="Welcome to Alert Barangay">
       <div className="landing-copy">
         <div className="landing-message">
-          <h1>Report. Respond.<br />Protect your barangay.</h1>
-          <p>One platform connecting residents and barangay officials for faster, clearer emergency response.</p>
+          <h1>{t("login.landing.title1")}<br />{t("login.landing.title2")}</h1>
+          <p>{t("login.landing.subtitle")}</p>
         </div>
         <div className="waves" aria-hidden="true"><span /><span /><span /></div>
       </div>
@@ -221,11 +288,11 @@ export default function LoginPage() {
         <section className="landing-welcome" aria-labelledby="welcome-title">
           <span className="welcome-mark" aria-hidden="true"><ShieldIcon /></span>
           <p className="welcome-brand">AlertBarangay</p>
-          <h2 id="welcome-title">Get Started</h2>
-          <p className="welcome-subtitle">Start with sign up or sign in</p>
+          <h2 id="welcome-title">{t("login.welcome.title")}</h2>
+          <p className="welcome-subtitle">{t("login.welcome.subtitle")}</p>
           <div className="welcome-actions">
-            <button className="welcome-button" type="button" onClick={() => openAuth("sign-up")}>Sign Up</button>
-            <button className="welcome-button" type="button" onClick={() => openAuth("sign-in")}>Sign In</button>
+            <button className="welcome-button" type="button" onClick={() => { setPortal("resident"); openAuth("sign-up"); }}>{t("login.welcome.signUp")}</button>
+            <button className="welcome-button" type="button" onClick={() => openAuth("sign-in")}>{t("login.welcome.signIn")}</button>
           </div>
           <CardWaves />
         </section>
@@ -234,7 +301,7 @@ export default function LoginPage() {
 
     <section className="sign-in-panel" aria-labelledby="form-title">
       <div className="form-wrap">
-        <button className="auth-back" type="button" aria-label="Back to welcome" onClick={backToLanding}>&larr;</button>
+        <button className="auth-back" type="button" aria-label={t("login.back")} onClick={backToLanding}>&larr;</button>
         <span className="auth-mark" aria-hidden="true"><ShieldIcon /></span>
         <p className="eyebrow">{eyebrow}</p>
         <h1 id="form-title" tabIndex={-1}>{heading}</h1>
@@ -242,43 +309,51 @@ export default function LoginPage() {
 
         <form onSubmit={(event) => void submit(event)} noValidate>
           {mode === "sign-in" && <fieldset className="roles">
-            <legend>I am signing in as</legend>
-            <label><input type="radio" name="role" value="resident" checked={portal === "resident"} onChange={() => setPortal("resident")} /><span className="chip">Admin</span></label>
-            <label><input type="radio" name="role" value="official" checked={portal === "official"} onChange={() => setPortal("official")} /><span className="chip">Barangay Official</span></label>
+            <legend>{t("login.signingInAs")}</legend>
+            {(Object.keys(portalLabels) as PortalChoice[]).map((choice) => <label key={choice}>
+              <input type="radio" name="role" value={choice} checked={portal === choice} onChange={() => choosePortal(choice)} disabled={busy || redirecting} />
+              <span className="chip">{portalLabels[choice]}</span>
+            </label>)}
           </fieldset>}
 
           {signingUp && <div className="field">
-            <label htmlFor="full-name">Full name</label>
+            <label htmlFor="full-name">{t("login.fullName")}</label>
             <input id="full-name" type="text" placeholder="Juan Dela Cruz" autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
           </div>}
           <div className="field">
-            <label htmlFor="email">Email address</label>
+            <label htmlFor="email">{t("login.email")}</label>
             <input id="email" type="email" placeholder="you@example.com" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
           </div>
-          {!resetting && <PasswordField id="password" label="Password" value={password} onChange={setPassword} autoComplete={signingUp ? "new-password" : "current-password"} show={showPassword} onToggle={() => setShowPassword((v) => !v)} />}
-          {mode === "sign-in" && <button type="button" className="forgot-link" onClick={() => openAuth("reset")}>Forgot password?</button>}
-          {signingUp && <PasswordField id="confirm-password" label="Confirm password" value={confirm} onChange={setConfirm} autoComplete="new-password" show={showConfirm} onToggle={() => setShowConfirm((v) => !v)} />}
+          {!resetting && <PasswordField id="password" label={t("login.password")} value={password} onChange={setPassword} autoComplete={signingUp ? "new-password" : "current-password"} show={showPassword} onToggle={() => setShowPassword((v) => !v)} />}
+          {mode === "sign-in" && <button type="button" className="forgot-link" onClick={() => openAuth("reset")}>{t("login.forgot")}</button>}
+          {signingUp && <PasswordField id="confirm-password" label={t("login.confirmPassword")} value={confirm} onChange={setConfirm} autoComplete="new-password" show={showConfirm} onToggle={() => setShowConfirm((v) => !v)} />}
 
-          <button className="submit" type="submit" disabled={busy}>
-            {busy
-              ? (signingUp ? "Creating account…" : resetting ? "Sending link…" : "Signing in…")
-              : <>{signingUp ? "Sign Up" : resetting ? "Send reset link" : "Sign In"} <span aria-hidden="true">&rarr;</span></>}
-          </button>
+          <LoadingButton
+            className="submit"
+            loading={busy || redirecting}
+            loadingText={redirecting ? t("login.busy.redirect") : signingUp ? t("login.busy.signUp") : resetting ? t("login.busy.reset") : t("login.busy.signIn")}
+          >
+            {signingUp ? t("login.submit.signUp") : resetting ? t("login.submit.reset") : t("login.submit.signIn")} <span aria-hidden="true">&rarr;</span>
+          </LoadingButton>
           <p className="form-message" role="status" aria-live="polite" data-kind={message?.kind} data-visible={message ? "true" : undefined}>{message?.text}</p>
         </form>
 
-        <p className="mode-prompt">
-          <span>{mode === "sign-in" ? "New to Alert Barangay?" : resetting ? "Remembered it?" : "Already have an account?"}</span>
-          <button className="mode-toggle" type="button" onClick={toggleMode}>{mode === "sign-in" ? "Create an account" : "Sign in"}</button>
-        </p>
+        {mode === "sign-in" && portal === "official"
+          ? <p className="mode-prompt official-note">
+            <span>{t("login.officialNote")}</span>
+          </p>
+          : <p className="mode-prompt">
+            <span>{mode === "sign-in" ? t("login.prompt.newResident") : resetting ? t("login.prompt.remembered") : t("login.prompt.haveAccount")}</span>
+            <button className="mode-toggle" type="button" onClick={toggleMode} disabled={busy}>{mode === "sign-in" ? t("login.toggle.create") : t("login.toggle.signIn")}</button>
+          </p>}
       </div>
       <CardWaves />
     </section>
 
     <aside className="hero-panel" aria-label="Alert Barangay">
       <div className="hero-content">
-        <h2 className="hero-title">Report. Respond.<br />Protect your barangay.</h2>
-        <p className="hero-subtitle">One platform connecting residents and barangay officials for faster, clearer emergency response.</p>
+        <h2 className="hero-title">{t("login.landing.title1")}<br />{t("login.landing.title2")}</h2>
+        <p className="hero-subtitle">{t("login.landing.subtitle")}</p>
       </div>
       <div className="waves" aria-hidden="true"><span /><span /><span /></div>
     </aside>

@@ -24,6 +24,8 @@ Routing always uses the account's real role in `public.profiles.role`. The Resid
    NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_xxx
    SUPABASE_SECRET_KEY=sb_secret_xxx
+   # Optional: enables the resident AI assistant
+   ANTHROPIC_API_KEY=sk-ant-...
    ```
 
    The secret key (Supabase > Project Settings > API Keys) is used only by server code in `src/lib/supabase/admin.ts`. Never give it a `NEXT_PUBLIC_` prefix and never commit `.env.local` (it is git-ignored).
@@ -39,6 +41,9 @@ Routing always uses the account's real role in `public.profiles.role`. The Resid
    | `202611250005_security_hardening.sql` | Locks role/status changes, active-admin checks, officials can update incidents, private incident media |
    | `202611250006_lock_down_legacy_dashboard_tables.sql` | Only if the old official-dashboard migrations were ever applied: removes their anonymous access |
    | `202611250007_reports_and_profiles_ux.sql` | Typed-address reports, officials can see reporter names, profile-photo URL check |
+   | `202611260001_incident_dispatch_history.sql` | Dispatch history for the official dashboard |
+   | `202611260002_resident_only_signup_and_role_rls.sql` | Public sign-up always creates residents (role metadata is stripped); only active residents can file reports |
+   | `202611260003_report_messages.sql` | Private resident ↔ barangay messages on each report, with notifications and live updates |
 
 4. Create the first admin: create a user under **Authentication > Users**, then in the SQL Editor:
 
@@ -65,10 +70,20 @@ Routing always uses the account's real role in `public.profiles.role`. The Resid
 
 - **Row-level security everywhere.** Browsers use only the publishable key; what they can read or write is decided by the policies in the migrations.
 - **Roles live in `public.profiles`.** Browsers can update only their own `full_name` and `avatar_url`; a trigger blocks role and status changes from the browser. Admin account changes go through `/api/admin/*` routes, which re-check that the caller is an active admin before using the server-only secret key.
-- **`src/proxy.ts`** refreshes the session cookie, sends each role to its own area, enforces maintenance mode, and blocks cross-site writes to `/api`. Pages re-check role and active status on the server too.
+- **Sign-up is for residents only.** The public form only creates resident accounts; the database trigger sets `role = 'resident'` whatever the browser sends. Official and admin accounts are created by an admin in **Admin > User management**.
+- **One dashboard per role:** `/resident/dashboard`, `/official/dashboard`, `/admin/dashboard`. The sign-in tab must match the account (the resident portal tab, labeled "Admin": residents only; Barangay Official tab: officials and admins), otherwise sign-in is refused with a message naming the right tab. Tab labels live in `portalLabels` in `src/lib/auth/roles.ts`.
+- **`src/proxy.ts`** (Next.js 16's name for middleware) refreshes the session cookie, sends each role to its own area (opening another role's area redirects to your own dashboard with a notice), enforces maintenance mode, and blocks cross-site writes to `/api`. Pages re-check role and active status on the server too.
 - **Private incident media.** Only the reporter and active staff can open incident photos and videos (signed links that expire after 10 minutes).
 - **Password changes** require the current password. Password resets use Supabase's emailed one-time link (`/auth/reset`).
+- **Private report messages.** Residents and staff talk about a report in `incident_messages`. The database stamps the sender and role; the apps show "Barangay official" or "Resident", never an email or phone number. Only the reporter and active staff can read a thread.
 - **Security headers** (no framing, `nosniff`, strict referrer, permissions policy) are set in `next.config.ts`.
+
+## Notifications, offline use and languages
+
+- **Notifications.** Residents get a bell in the header with report status changes, messages from the barangay and announcements, live through Supabase Realtime. With permission ("Turn on alerts on this device"), the browser shows a system notification while the app is open in another tab or minimised. Alerts when the app is fully closed need server-sent Web Push (VAPID keys plus a small sender, e.g. a Supabase Edge Function) or Firebase Cloud Messaging for the Android build (`google-services.json`); `public/sw.js` already displays pushed messages.
+- **Installable / offline.** `public/manifest.webmanifest` and `public/sw.js` make the site installable. The resident dashboard is cached for offline use; a report written offline (with its photo or video) is saved on the device and sent automatically when the connection returns. Sign-out clears the cached page.
+- **Languages.** Residents can switch between English, Filipino and Cebuano (login page and resident pages; stored in the `ab_lang` cookie). Text lives in `src/lib/i18n/messages.ts`; a test checks every key exists in all three languages. Have a native speaker review the Filipino and Cebuano wording. Official and admin screens are English.
+- **Staff tools.** The official dashboard has a live incident map (OpenStreetMap), report analytics (types, median response and resolve times, hotspots) and per-report message threads. Admins see the same analytics under **Admin > Analytics**.
 
 ## Project layout
 

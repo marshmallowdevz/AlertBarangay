@@ -1,55 +1,48 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import './Official.css';
+import { ReportMessages } from '@/components/messages/report-messages';
 
-export default function MessagesView({ conversations, onReply }) {
-  const [activeConversationId, setActiveConversationId] = useState(conversations[0]?.id ?? '');
-  const [reply, setReply] = useState('');
-  const [formError, setFormError] = useState('');
-  const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId);
+const finished = ['Resolved', 'Closed', 'Done'];
 
-  const submitReply = (event) => {
-    event.preventDefault();
-    const body = reply.trim();
-    if (!activeConversation || !body) {
-      setFormError('Choose a conversation and enter a message.');
-      return;
-    }
-    onReply(activeConversation.id, body);
-    setReply('');
-    setFormError('');
-  };
+/**
+ * One private thread per incident report, between barangay staff and the
+ * resident who filed it. Residents are never shown by name, email or phone.
+ */
+export default function MessagesView({ reports, userId }) {
+  const [showClosed, setShowClosed] = useState(false);
+  const threads = useMemo(
+    () => reports.filter((report) => report.incidentId && (showClosed || !finished.includes(report.status))),
+    [reports, showClosed],
+  );
+  const [activeId, setActiveId] = useState('');
+  const active = threads.find((report) => report.incidentId === activeId) ?? threads[0];
 
   return (
     <section className="card">
-      <div className="card-head"><div><h2>Messages</h2><p className="muted">Sample conversations for this dashboard preview.</p></div></div>
-      {conversations.length === 0 ? <p className="empty">No sample conversations to show.</p> : (
-        <div className="message-layout">
-          <nav className="conversation-list" aria-label="Conversations">
-            {conversations.map((conversation) => (
-              <button type="button" key={conversation.id} className={`conversation-button ${activeConversationId === conversation.id ? 'active' : ''}`} onClick={() => setActiveConversationId(conversation.id)}>
-                <strong>{conversation.residentName}</strong>
-                <small>{conversation.messages.at(-1)?.body ?? 'No messages yet'}</small>
-              </button>
-            ))}
-          </nav>
-          <div className="message-thread">
-            <h3>{activeConversation?.residentName}</h3>
-            <div className="thread-history" aria-live="polite">
-              {activeConversation?.messages.map((message) => (
-                <article key={message.id} className={`message-bubble ${message.senderRole === 'official' ? 'outgoing' : ''}`}>
-                  <strong>{message.sender}</strong><p>{message.body}</p>
-                  <small>{new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(message.createdAt))}</small>
-                </article>
+      <div className="card-head">
+        <div><h2>Messages</h2><p className="muted">Message the resident who filed a report. Your phone number and email stay private, and so do theirs.</p></div>
+        <label className="inline-toggle"><input type="checkbox" checked={showClosed} onChange={(event) => setShowClosed(event.target.checked)} /> Show resolved reports</label>
+      </div>
+      {!userId ? <p className="empty">Sign in with your official account to message residents.</p>
+        : threads.length === 0 ? <p className="empty">{showClosed ? 'No reports yet.' : 'No open reports. Turn on “Show resolved reports” to see older threads.'}</p> : (
+          <div className="message-layout">
+            <nav className="conversation-list" aria-label="Report threads">
+              {threads.map((report) => (
+                <button type="button" key={report.incidentId} aria-current={active?.incidentId === report.incidentId ? 'true' : undefined} className={`conversation-button ${active?.incidentId === report.incidentId ? 'active' : ''}`} onClick={() => setActiveId(report.incidentId)}>
+                  <strong>{report.id} · {report.type}</strong>
+                  <small>{report.status} · {report.location}</small>
+                </button>
               ))}
-            </div>
-            <form className="reply-form" onSubmit={submitReply}>
-              <label>Reply<textarea rows="3" maxLength={1000} value={reply} onChange={(event) => setReply(event.target.value)} required /></label>
-              {formError && <p className="form-error" role="alert">{formError}</p>}
-              <button type="submit" className="btn btn-maroon">Send reply</button>
-            </form>
+            </nav>
+            {active && (
+              <div className="message-thread">
+                <h3>{active.id} · {active.type}</h3>
+                <p className="muted">{active.description}</p>
+                <ReportMessages key={active.incidentId} incidentId={active.incidentId} viewerId={userId} viewer="staff" />
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        )}
     </section>
   );
 }

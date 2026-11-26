@@ -222,6 +222,24 @@ async function fetchNotifications(userId) {
   };
 }
 
+// This app is for residents only. Officials and admins use the web dashboard,
+// so their accounts are signed straight back out here. The role always comes
+// from public.profiles (never from anything the user can edit).
+async function residentAccessError(userId) {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("role, is_active")
+    .eq("id", userId)
+    .maybeSingle();
+  if (error) return "We couldn't verify your account. Check your connection and try again.";
+  if (!data) return "Your account isn't set up yet. Please contact your barangay administrator.";
+  if (data.is_active === false) return "This account has been disabled. Please contact your barangay administrator.";
+  if (data.role !== "resident") {
+    return "This app is for residents only. Barangay officials and admins should sign in on the AlertBarangay web dashboard.";
+  }
+  return "";
+}
+
 async function fetchProfile(userId) {
   const { data } = await supabase
     .from("profiles")
@@ -543,6 +561,9 @@ function ReelPostMedia({ post }) {
 export default function App() {
   const [session, setSession] = useState(null);
   const [authReady, setAuthReady] = useState(false);
+  // Id of the signed-in account once it is confirmed to be a resident.
+  const [verifiedUserId, setVerifiedUserId] = useState("");
+  const [authNotice, setAuthNotice] = useState("");
   const [page, setPage] = useState("dashboard");
   const [mapOpen, setMapOpen] = useState(false);
   const [mapLaunchOptions, setMapLaunchOptions] = useState({ openReport: false, type: "" });
@@ -578,7 +599,8 @@ export default function App() {
   const reloadReelsRef = useRef(null);
   useClickOutside(profileRef, () => setProfileOpen(false));
 
-  const userId = session?.user?.id;
+  // Nothing loads until the account is confirmed to be a resident.
+  const userId = verifiedUserId && verifiedUserId === session?.user?.id ? verifiedUserId : undefined;
   const userEmail = session?.user?.email;
 
   useEffect(() => {
@@ -616,6 +638,20 @@ export default function App() {
     });
     return () => listener.subscription.unsubscribe();
   }, []);
+
+  // Role gate: only resident accounts may use this app.
+  useEffect(() => {
+    const id = session?.user?.id;
+    if (!id) { setVerifiedUserId(""); return; }
+    let cancelled = false;
+    residentAccessError(id).then(async (message) => {
+      if (cancelled) return;
+      if (!message) { setVerifiedUserId(id); setAuthNotice(""); return; }
+      setAuthNotice(message);
+      await supabase.auth.signOut();
+    });
+    return () => { cancelled = true; };
+  }, [session?.user?.id]);
 
   // After login, load this resident's profile, reports and notifications.
   useEffect(() => {
@@ -1041,7 +1077,8 @@ export default function App() {
 
   if (!isConfigured) return <SetupNotice detail={configError} />;
   if (!authReady) return <div className="auth-loading">Loading…</div>;
-  if (!session) return <AuthScreen />;
+  if (!session) return <AuthScreen initialError={authNotice} />;
+  if (!userId) return <div className="auth-loading">Checking your account…</div>;
 
   return (
     <div className="app">
@@ -1558,7 +1595,7 @@ function ProfileRow({ icon: Icon, label, detail, active, onClick }) {
 
 /* ---------- Get started / Sign up / Log in ---------- */
 
-function AuthScreen() {
+function AuthScreen({ initialError = "" }) {
   const [screen, setScreen] = useState("welcome"); // welcome | login | signup
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -1566,9 +1603,17 @@ function AuthScreen() {
   const [confirm, setConfirm] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(initialError);
   const [notice, setNotice] = useState("");
   const isSignup = screen === "signup";
+
+  // Show the "residents only" message on the sign-in screen when an official
+  // or admin account was turned away.
+  useEffect(() => {
+    if (!initialError) return;
+    setError(initialError);
+    setScreen("login");
+  }, [initialError]);
 
   const goScreen = (next) => {
     setScreen(next);

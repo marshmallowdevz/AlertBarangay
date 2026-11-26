@@ -1,15 +1,5 @@
-import type { Metadata } from "next";
-import { RoleDashboard } from "@/components/role-dashboard";
-import { ResidentDashboard } from "@/components/resident/resident-dashboard";
-import { requireRolePage } from "@/lib/auth/require-role-page";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Resident dashboard" };
-
-export const dynamic = "force-dynamic";
-
-export default async function ResidentDashboardPage() {
-  const { userId, fullName } = await requireRolePage("resident");
-  return <RoleDashboard role="resident" fullName={fullName}>
-    <ResidentDashboard userId={userId} />
-  </RoleDashboard>;
+export default function ResidentIndexPage() {
+  redirect("/resident/dashboard");
 }

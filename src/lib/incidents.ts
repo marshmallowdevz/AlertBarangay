@@ -1,7 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-// Must match the checks in supabase/migrations/202611150001_incidents.sql.
-export const incidentTypes = ["fire", "medical", "flood", "crime", "accident", "other"] as const;
+// Must match the checks in supabase/migrations/202611150001_incidents.sql and
+// 202611220001_incident_type_options.sql. "other" stays last in the picker.
+export const incidentTypes = [
+  "fire", "medical", "flood", "crime", "accident",
+  "electrical_hazard", "road_damage", "water_problems", "garbage_collection", "other",
+] as const;
 export type IncidentType = (typeof incidentTypes)[number];
 
 export const incidentStatuses = ["pending", "responding", "resolved"] as const;
@@ -35,6 +39,10 @@ export const typeLabels: Record<IncidentType, string> = {
   flood: "Flood",
   crime: "Crime",
   accident: "Accident",
+  electrical_hazard: "Electrical hazard",
+  road_damage: "Road damage",
+  water_problems: "Water problem",
+  garbage_collection: "Garbage",
   other: "Other",
 };
 

@@ -12,5 +12,5 @@ export default defineConfig([
       "@next/next/no-img-element": "off",
     },
   },
-  globalIgnores([".next/**", "out/**", "build/**", "coverage/**", "android/**", "next-env.d.ts"]),
+  globalIgnores([".next/**", "out/**", "build/**", "coverage/**", "android/**", "resident-app/**", "supabase/functions/**", "next-env.d.ts"]),
 ]);

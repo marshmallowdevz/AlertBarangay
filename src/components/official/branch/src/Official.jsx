@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import './Official.css';
 import * as supabaseClientModule from './supabaseClient';
 import { configError, isConfigured } from './supabaseClient';
-import { initialConversations, initialResidents } from './dashboardData';
+import { initialResidents } from './dashboardData';
 import OverviewView from './OverviewView';
 import ResidentsView from './ResidentsView';
 import MessagesView from './MessagesView';
@@ -25,6 +25,8 @@ import {
 import { listNotifications, subscribeToNotifications } from './notificationService';
 import NotificationsView from './NotificationsView';
 import ReportsView from './ReportsView';
+import MapView from './MapView';
+import AnalyticsView from './AnalyticsView';
 import LoadingIndicator from './LoadingIndicator';
 
 // Works whether or not supabaseClient.js exports a `supabase` object.
@@ -35,6 +37,8 @@ const renderIcon = (name, size = 18) => <Icon name={name} size={size} />;
 const navItems = [
   { id: 'overview', label: 'Overview', icon: 'overview' },
   { id: 'reports', label: 'Incident reports', icon: 'dispatch' },
+  { id: 'map', label: 'Live map', icon: 'location' },
+  { id: 'analytics', label: 'Analytics', icon: 'activity' },
   { id: 'announcements', label: 'Announcements', icon: 'bell' },
   { id: 'dispatch', label: 'Dispatch', icon: 'dispatch' },
   { id: 'residents', label: 'Residents', icon: 'residents' },
@@ -100,7 +104,6 @@ function Official({ user, staffRole = '', onSignOut }) {
   const [operationalData, setOperationalData] = useState({
     reports: [],
     residents: initialResidents,
-    conversations: initialConversations,
     dispatches: [],
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -177,9 +180,11 @@ function Official({ user, staffRole = '', onSignOut }) {
   }, [sidebarHidden]);
 
   useEffect(() => {
-    setNow(new Date());
-    const timer = window.setInterval(() => setNow(new Date()), 1000);
-    return () => window.clearInterval(timer);
+    // First tick right after mount (the server render has no clock), then every second.
+    const tick = () => setNow(new Date());
+    const first = window.setTimeout(tick, 0);
+    const timer = window.setInterval(tick, 1000);
+    return () => { window.clearTimeout(first); window.clearInterval(timer); };
   }, []);
 
   useEffect(() => {
@@ -521,16 +526,6 @@ function Official({ user, staffRole = '', onSignOut }) {
     setActiveNav(view);
   };
 
-  const replyToConversation = (conversationId, body) => {
-    const sentAt = new Date().toISOString();
-    setOperationalData((current) => ({
-      ...current,
-      conversations: current.conversations.map((conversation) => conversation.id === conversationId
-        ? { ...conversation, messages: [...conversation.messages, { id: `reply-${Date.now()}`, sender: profile.name, senderRole: 'official', body, createdAt: sentAt }] }
-        : conversation),
-    }));
-  };
-
   const dispatchResponse = async ({ reportId, responseType, note }) => {
     const report = operationalData.reports.find((item) => item.id === reportId);
     if (!report) throw new Error('That incident could not be found. Refresh the dashboard and try again.');
@@ -749,14 +744,17 @@ function Official({ user, staffRole = '', onSignOut }) {
               error={reportsError}
               onRetry={() => { setReportsLoading(true); setReportsError(''); setReportsRetry((value) => value + 1); }}
               onMarkDone={markDone}
+              userId={user?.id}
             />
           )}
+          {activeNav === 'map' && <MapView reports={operationalData.reports} loading={reportsLoading} error={reportsError} />}
+          {activeNav === 'analytics' && <AnalyticsView />}
           {activeNav === 'dispatch' && (
             <DispatchView reports={operationalData.reports} dispatches={operationalData.dispatches} dispatchesError={dispatchesError} responseType={dispatchResponseType} onResponseTypeChange={setDispatchResponseType} onDispatch={dispatchResponse} />
           )}
           {activeNav === 'residents' && <ResidentsView residents={operationalData.residents} />}
           {activeNav === 'messages' && (
-            <MessagesView conversations={operationalData.conversations} onReply={replyToConversation} />
+            <MessagesView reports={operationalData.reports} userId={user?.id} />
           )}
           {activeNav === 'announcements' && (
             <AnnouncementsView announcements={announcements} loading={announcementLoading} error={announcementError} onRetry={isConfigured ? () => { setAnnouncementLoading(true); setAnnouncementError(''); setAnnouncementRetry((value) => value + 1); } : undefined} onAnnounce={canManageAnnouncements ? openAnnouncementComposer : undefined} onEdit={canManageAnnouncements ? editAnnouncement : undefined} onDelete={canManageAnnouncements ? removeAnnouncement : undefined} onArchive={canManageAnnouncements ? changeAnnouncementArchiveState : undefined} busyAnnouncementId={busyAnnouncementId} actionError={announcementActionError} canManage={canManageAnnouncements} />
