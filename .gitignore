@@ -20,5 +20,25 @@ supabase/.branches/
 npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
+lerna-debug.log*
+
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+dist-ssr
+*.local
+**/.gradle/
+**/build/
+supabase/.temp/
+oracleJdk-*/
+.env
+.env.*
+!.env.example
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
 .DS_Store
 Thumbs.db

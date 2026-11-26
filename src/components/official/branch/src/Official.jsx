@@ -43,11 +43,17 @@ const navItems = [
 ];
 
 const defaultContacts = {
-  emergency_phone: '911',
-  call_center_phone: '0917-123-4567',
+  emergency_phone: '0918-921-0000',
+  call_center_phone: '0915-583-9829',
   emergency_contacts: [
-    { id: 'emergency-line', name: 'Emergency line', phone: '911' },
-    { id: 'call-center', name: 'Call center support', phone: '0917-123-4567' },
+    { id: 'red-cross-cebu', name: 'Philippine Red Cross Cebu', phone: '0915-583-9829' },
+    { id: 'labangon-fire', name: 'Fire Station (Labangon)', phone: '(032) 261-0911' },
+    { id: 'labangon-police', name: 'Police Station (Labangon)', phone: '0998 598 6292' },
+    { id: 'rescue-unit', name: 'Rescue Unit', phone: '0918-921-0000' },
+    { id: 'city-hall', name: 'City Hall', phone: '(032) 411-0100' },
+    { id: 'visayan-electric', name: 'Visayan Electric', phone: '(032) 230-8326' },
+    { id: 'ccdrmo', name: 'CCDRRMO', phone: '(032) 262-1424' },
+    { id: 'mcwd', name: 'MCWD', phone: '(032) 254-8434' },
   ],
 };
 const defaultSharedProfile = { name: 'Captain Dela Cruz', picture: '' };
@@ -88,7 +94,7 @@ function mergeAnnouncements(current, incoming) {
   return [...unique.values()].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 }
 
-function Official({ user, onSignOut }) {
+function Official({ user, staffRole = '', onSignOut }) {
   const [activeNav, setActiveNav] = useState('overview');
   const [dispatchResponseType, setDispatchResponseType] = useState('Fire');
   const [operationalData, setOperationalData] = useState({
@@ -257,8 +263,8 @@ function Official({ user, onSignOut }) {
     let active = true;
     if (!isConfigured) return () => { active = false; };
 
-    listReports()
-      .then((rows) => { if (active) { setOperationalData((current) => ({ ...current, reports: rows })); setReportsError(''); } })
+    const refreshReports = () => listReports()
+      .then((rows) => { if (active) setOperationalData((current) => ({ ...current, reports: rows })); })
       .catch((error) => {
         console.error('Unable to load shared reports.', error);
         if (active) setReportsError(error.message || 'Incident reports could not be loaded.');
@@ -311,7 +317,7 @@ function Official({ user, onSignOut }) {
       (notification) => {
         if (!active) return;
         mergeNotifications([notification]);
-        if (['report_created', 'report_dispatched'].includes(notification.type)) {
+        if (['report_created', 'report_dispatched', 'incident_created', 'incident_status_changed'].includes(notification.type)) {
           listReports()
             .then((rows) => { if (active) setOperationalData((current) => ({ ...current, reports: rows })); })
             .catch((error) => console.error('Unable to refresh reports after a live notification.', error));

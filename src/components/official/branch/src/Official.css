@@ -450,6 +450,9 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--gold); bord
 .severity-high { background: #fae8e5; color: #952e25; }
 .severity-medium { background: #fff2d2; color: #795311; }
 .report-record h3 { margin: 8px 0 0; font-size: 15px; }
+.report-media-preview { display: grid; gap: 8px; justify-items: start; }
+.report-media-preview img,
+.report-media-preview video { display: block; width: min(100%, 520px); max-height: 360px; border-radius: 12px; object-fit: contain; background: #111; }
 .report-history { margin: 0; padding-left: 22px; }
 .report-history li { padding: 5px 0 5px 4px; }
 .report-history li p { margin: 4px 0; }

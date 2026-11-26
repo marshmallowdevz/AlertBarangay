@@ -3,7 +3,7 @@ import './Official.css';
 import LoadingIndicator from './LoadingIndicator';
 import { supabase } from './supabaseClient';
 
-const reportTypes = ['Medical', 'Fire', 'Rescue', 'Flooding', 'Power', 'Other'];
+const reportTypes = ['Medical', 'Fire', 'Rescue', 'Flooding', 'Power', 'Crime', 'Accident', 'Electrical Hazard', 'Garbage Collection', 'Road Damage', 'Water Problems', 'Other'];
 const reportStatuses = ['Pending', 'Assigned', 'In progress', 'Monitoring', 'Resolved', 'Closed'];
 const reportSeverities = ['Low', 'Medium', 'High'];
 
@@ -90,7 +90,7 @@ export default function ReportsView({ reports, loading, error, onRetry, onMarkDo
             <summary>
               <span><strong>{report.description || report.type}</strong><small>{report.type} · {report.location}</small></span>
               <span className={`status-pill status-${report.status.toLowerCase().replaceAll(' ', '-')}`}>{report.status}</span>
-              <span className={`severity-label severity-${report.severity.toLowerCase()}`}>{report.severity}</span>
+              {report.severity && <span className={`severity-label severity-${report.severity.toLowerCase()}`}>{report.severity}</span>}
             </summary>
             <p>{report.description}</p>
             <small>Reported by {report.author || 'Resident'} · {formatDate(report.created_at)}</small>

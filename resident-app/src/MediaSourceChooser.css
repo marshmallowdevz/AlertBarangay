@@ -1,0 +1,67 @@
+.media-source-picker { position: relative; width: 100%; }
+.media-source-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid var(--line, #dfd1d7);
+  border-radius: 9px;
+  color: var(--maroon, #77203e);
+  background: var(--card, #fffdfa);
+  font: inherit;
+  font-size: .82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.media-source-trigger:disabled { opacity: .55; cursor: not-allowed; }
+.media-source-options {
+  position: absolute;
+  z-index: 30;
+  right: 0;
+  bottom: calc(100% + 8px);
+  left: 0;
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border: 1px solid var(--line, #dfd1d7);
+  border-radius: 12px;
+  color: var(--ink, #35242b);
+  background: var(--card, #fffdfa);
+  box-shadow: 0 10px 30px rgba(25, 12, 18, .24);
+}
+.media-source-options > strong { padding: 3px 6px 5px; font-size: .76rem; }
+.media-source-option,
+.media-source-cancel {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 39px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 8px;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  font-size: .78rem;
+  text-align: left;
+  cursor: pointer;
+}
+.media-source-option:hover,
+.media-source-cancel:hover { background: color-mix(in srgb, var(--maroon, #77203e) 9%, transparent); }
+.media-source-option svg { color: var(--maroon, #77203e); }
+.media-source-cancel { justify-content: center; margin-top: 3px; border-top: 1px solid var(--line, #dfd1d7); border-radius: 0 0 8px 8px; color: var(--muted, #74636a); }
+.media-source-hidden-input { display: none !important; }
+.photo-upload .media-source-trigger { width: min(100%, 260px); min-height: 36px; font-size: .74rem; }
+.incident-field .media-source-trigger { min-height: 40px; }
+
+html[data-theme="dark"] .media-source-options {
+  border-color: #59404a;
+  color: #f4e9ed;
+  background: #282229;
+}
+html[data-theme="dark"] .media-source-option:hover,
+html[data-theme="dark"] .media-source-cancel:hover { background: rgba(255, 255, 255, .08); }
+html[data-theme="dark"] .media-source-cancel { border-color: #59404a; color: #c7b5bd; }

@@ -5,6 +5,8 @@ const labels = {
   report_created: 'Report',
   report_dispatched: 'Dispatch',
   announcement_published: 'Announcement',
+  incident_created: 'New incident',
+  incident_status_changed: 'Incident update',
 };
 
 export default function NotificationsView({ notifications, loading, error, onRetry }) {
