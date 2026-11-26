@@ -127,7 +127,7 @@ async function resolveAppRole(supabase, userId, accessToken) {
     }
     let profile;
     try {
-        const result = await supabase.from("profiles").select("id, role").eq("id", userId).maybeSingle();
+        const result = await supabase.from("profiles").select("id, role, is_active").eq("id", userId).maybeSingle();
         if (result.error) throw new RoleResolutionError();
         profile = result.data;
     } catch  {
@@ -136,6 +136,10 @@ async function resolveAppRole(supabase, userId, accessToken) {
     if (!profile) return {
         ok: false,
         reason: "missing"
+    };
+    if (profile.is_active === false) return {
+        ok: false,
+        reason: "inactive"
     };
     if (!(0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$auth$2f$roles$2e$ts__$5b$middleware$5d$__$28$ecmascript$29$__["isAppRole"])(profile.role)) return {
         ok: false,
@@ -166,15 +170,43 @@ __turbopack_context__.s([
     ()=>getRequiredRole,
     "getRoleDashboardPath",
     ()=>getRoleDashboardPath,
+    "getRoleLabel",
+    ()=>getRoleLabel,
     "isAppRole",
     ()=>isAppRole,
+    "portalAllowsRole",
+    ()=>portalAllowsRole,
+    "portalLabels",
+    ()=>portalLabels,
+    "portalRoles",
+    ()=>portalRoles,
     "roleDashboardPaths",
-    ()=>roleDashboardPaths
+    ()=>roleDashboardPaths,
+    "wrongPortalMessage",
+    ()=>wrongPortalMessage
 ]);
 const roleDashboardPaths = {
-    resident: "/resident",
-    official: "/dashboard",
-    admin: "/admin"
+    resident: "/resident/dashboard",
+    official: "/official/dashboard",
+    admin: "/admin/dashboard"
+};
+const portalLabels = {
+    resident: "Admin",
+    official: "Barangay Official"
+};
+const portalRoles = {
+    resident: [
+        "resident"
+    ],
+    official: [
+        "official",
+        "admin"
+    ]
+};
+const roleLabels = {
+    resident: "Resident",
+    official: "Barangay Official",
+    admin: "Administrator"
 };
 function isAppRole(role) {
     return role === "resident" || role === "official" || role === "admin";
@@ -182,10 +214,24 @@ function isAppRole(role) {
 function getRoleDashboardPath(role) {
     return isAppRole(role) ? roleDashboardPaths[role] : null;
 }
+function getRoleLabel(role) {
+    return roleLabels[role];
+}
+function portalAllowsRole(portal, role) {
+    return portalRoles[portal].includes(role);
+}
+function wrongPortalMessage(portal, role) {
+    const rightTab = Object.keys(portalRoles).find((choice)=>portalAllowsRole(choice, role));
+    const tab = rightTab ? portalLabels[rightTab] : portalLabels[portal === "resident" ? "official" : "resident"];
+    return `This is a ${roleLabels[role]} account, so it can't sign in with the ${portalLabels[portal]} tab. Please choose the ${tab} tab instead.`;
+}
+function inArea(pathname, area) {
+    return pathname === area || pathname.startsWith(`${area}/`);
+}
 function getRequiredRole(pathname) {
-    if (pathname === "/admin" || pathname.startsWith("/admin/")) return "admin";
-    if (pathname === "/dashboard" || pathname.startsWith("/dashboard/")) return "official";
-    if (pathname === "/resident" || pathname.startsWith("/resident/")) return "resident";
+    if (inArea(pathname, "/admin")) return "admin";
+    if (inArea(pathname, "/official")) return "official";
+    if (inArea(pathname, "/resident")) return "resident";
     return null;
 }
 }),
@@ -249,7 +295,8 @@ async function proxy(request) {
     const { data: { user } } = await supabase.auth.getUser();
     const pathname = request.nextUrl.pathname;
     const requiredRole = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$auth$2f$roles$2e$ts__$5b$middleware$5d$__$28$ecmascript$29$__["getRequiredRole"])(pathname);
-    const isEntryRoute = pathname === "/" || pathname === "/login";
+    // Entry routes send a signed-in user straight to their own role dashboard.
+    const isEntryRoute = pathname === "/" || pathname === "/login" || pathname === "/dashboard";
     const redirectTo = (path)=>{
         const redirectResponse = __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$server$2e$js__$5b$middleware$5d$__$28$ecmascript$29$__["NextResponse"].redirect(new URL(path, request.url));
         response.cookies.getAll().forEach((cookie)=>redirectResponse.cookies.set(cookie));
@@ -288,7 +335,7 @@ async function proxy(request) {
         return redirectTo("/maintenance");
     }
     if (!user) {
-        if (requiredRole) return redirectTo("/login");
+        if (requiredRole) return redirectTo("/login?notice=signin");
         return response;
     }
     if (!requiredRole && !isEntryRoute) return response;
@@ -296,20 +343,23 @@ async function proxy(request) {
     try {
         resolution = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$auth$2f$resolve$2d$app$2d$role$2e$ts__$5b$middleware$5d$__$28$ecmascript$29$__["resolveAppRole"])(supabase, user.id);
     } catch  {
-        if (requiredRole) return redirectTo("/login");
+        if (requiredRole) return redirectTo("/login?notice=unavailable");
         return response;
     }
     if (!resolution.ok) {
-        if (requiredRole) return redirectTo("/login");
+        if (requiredRole || pathname === "/dashboard") return redirectTo("/login?notice=role");
         return response;
     }
     if (isEntryRoute) return redirectTo(resolution.destination);
-    if (requiredRole && resolution.role !== requiredRole) return redirectTo(resolution.destination);
+    // Role-based route protection: a resident can never open /official/* or
+    // /admin/*, an official can never open /resident/* or /admin/*, and so on.
+    // They land on their own dashboard with a short explanation instead.
+    if (requiredRole && resolution.role !== requiredRole) return redirectTo(`${resolution.destination}?notice=forbidden`);
     return response;
 }
 const config = {
     matcher: [
-        "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"
+        "/((?!_next/static|_next/image|favicon.ico|sw.js|manifest.webmanifest|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"
     ]
 };
 }),

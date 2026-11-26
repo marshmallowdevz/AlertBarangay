@@ -1,3 +1,0 @@
-module.exports=[34077,a=>{"use strict";var b=a.i(55908);async function c(a,c){let{data:d,error:e}=await a.from("profiles").select("id, role").eq("id",c).maybeSingle();if(e)return{ok:!1,message:"We couldn't read your account role. Please try again in a moment."};let f=(0,b.f)(d?.role);return f?{ok:!0,destination:f}:{ok:!1,message:"This account has no role yet. Contact your barangay administrator."}}a.s(["f",0,c])},55908,a=>{"use strict";let b={resident:"/resident",official:"/dashboard",admin:"/admin"};a.s(["f",0,function(a){return"resident"===a||"official"===a||"admin"===a?b[a]:null}])}];
-
-//# sourceMappingURL=src_lib_auth_15l8jjciaba93._.js.map

@@ -121,6 +121,8 @@
 .ab-login .waves { height: 80px; }
 .ab-login .landing-welcome-wrap { flex: 1; align-items: start; padding: 20px 18px calc(24px + env(safe-area-inset-bottom)); background: var(--bg); }
 .ab-login .landing-welcome { min-height: 470px; padding: 30px 24px 140px; }
+.ab-login .welcome-subtitle { display: none; }
+.ab-login .landing-welcome .welcome-actions { margin-top: 18px; }
 .ab-login .welcome-mark { width: 78px; height: 78px; border-radius: 23px; }
 .ab-login .landing-welcome h2 { margin-top: 24px; }
 .ab-login.is-auth { display: flex; align-items: center; justify-content: center; background: var(--bg); }
@@ -180,3 +182,22 @@
 .ab-login.reset-page { display: grid; place-items: center; grid-template-columns: 1fr; background: var(--bg); }
 .ab-login.reset-page > .sign-in-panel { padding-bottom: 32px; }
 .ab-login a.submit { text-decoration: none; }
+
+/* The resident sign-up CTA is only shown on the mobile landing layout. */
+.ab-login .mobile-signup-cta { display: none; }
+@media (max-width: 900px) {
+  .ab-login[data-auth-mode="sign-in"] .roles { display: none; }
+  .ab-login .mobile-signup-cta { display: block; }
+}
+@media (min-width: 901px) {
+  .ab-login[data-auth-mode="sign-in"] .roles { display: grid; }
+}
+.ab-login .official-note span { display: block; max-width: 340px; margin: 0 auto; text-align: center; font-size: 13px; line-height: 1.5; opacity: .85; }
+.ab-login .submit.is-loading { cursor: wait; opacity: .85; transform: none; }
+.ab-login .submit:disabled { cursor: wait; }
+
+/* Language picker on the sign-in screens */
+.ab-login{position:relative}
+.ab-login .login-lang{position:absolute;top:14px;right:14px;z-index:20;background:#ffffff14;color:#f6dde5;border-color:#ffffff33;backdrop-filter:blur(6px)}
+.ab-login .login-lang select option{color:#231815;background:#fff}
+.ab-login .login-lang:focus-within{outline-color:#d4a843}

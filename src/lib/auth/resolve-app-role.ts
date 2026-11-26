@@ -24,11 +24,11 @@ export async function resolveAppRole(
   if (user?.banned_until && new Date(user.banned_until).getTime() > Date.now()) {
     return { ok: false, reason: "inactive" };
   }
-  let profile: { role: unknown } | null;
+  let profile: { role: unknown; is_active?: unknown } | null;
   try {
     const result = await supabase
       .from("profiles")
-      .select("id, role")
+      .select("id, role, is_active")
       .eq("id", userId)
       .maybeSingle();
     if (result.error) throw new RoleResolutionError();
@@ -37,6 +37,7 @@ export async function resolveAppRole(
     throw new RoleResolutionError();
   }
   if (!profile) return { ok: false, reason: "missing" };
+  if (profile.is_active === false) return { ok: false, reason: "inactive" };
   if (!isAppRole(profile.role)) return { ok: false, reason: "unrecognized" };
 
   const role = profile.role;

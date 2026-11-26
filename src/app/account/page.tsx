@@ -8,9 +8,9 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Account" };
 
 export default async function AccountPage() {
-  const { role, email, fullName, avatarUrl } = await requireRolePage(["resident", "official", "admin"]);
+  const { role, userId, email, fullName, avatarUrl } = await requireRolePage(["resident", "official", "admin"]);
   if (role === "admin") redirect("/admin/profile");
-  return <RoleDashboard role={role} fullName={fullName} title="Your account" subtitle="Update your name, photo and password.">
+  return <RoleDashboard role={role} userId={role === "resident" ? userId : undefined} fullName={fullName} title="Your account" subtitle="Update your name, photo and password.">
     <ProfileSettings email={email} initialName={fullName} initialAvatarUrl={avatarUrl} embedded />
   </RoleDashboard>;
 }

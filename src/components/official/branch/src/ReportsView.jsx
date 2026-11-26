@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import './Official.css';
 import LoadingIndicator from './LoadingIndicator';
 import { supabase } from './supabaseClient';
+import { IncidentMedia } from '@/components/incident-media';
+import { ReportMessages } from '@/components/messages/report-messages';
 
-const reportTypes = ['Medical', 'Fire', 'Rescue', 'Flooding', 'Power', 'Crime', 'Accident', 'Electrical Hazard', 'Garbage Collection', 'Road Damage', 'Water Problems', 'Other'];
+const reportTypes = ['Medical', 'Fire', 'Flooding', 'Crime', 'Accident', 'Electrical Hazard', 'Garbage Collection', 'Road Damage', 'Water Problems', 'Other'];
 const reportStatuses = ['Pending', 'Assigned', 'In progress', 'Monitoring', 'Resolved', 'Closed'];
 const reportSeverities = ['Low', 'Medium', 'High'];
 
@@ -14,7 +16,7 @@ function formatDate(value) {
     : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 }
 
-export default function ReportsView({ reports, loading, error, onRetry, onMarkDone }) {
+export default function ReportsView({ reports, loading, error, onRetry, onMarkDone, userId }) {
   const [query, setQuery] = useState('');
   const [type, setType] = useState('All categories');
   const [status, setStatus] = useState('All statuses');
@@ -33,7 +35,7 @@ export default function ReportsView({ reports, loading, error, onRetry, onMarkDo
     const channel = supabase
       .channel('official-live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'incidents' }, () => reloadRef.current?.())
-      .subscribe((subscriptionStatus) => console.log('realtime:', subscriptionStatus));
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
@@ -48,7 +50,8 @@ export default function ReportsView({ reports, loading, error, onRetry, onMarkDo
       await onMarkDone({ reportId: report.id, note: '' });
     } catch (err) {
       console.error('Unable to mark the report as done.', err);
-      setActionError(`The report could not be marked as done: ${err.message || 'An unexpected error occurred.'}`);
+      const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
+      setActionError(`The report could not be marked as done: ${message}`);
     } finally {
       setBusyReportId('');
     }
@@ -94,6 +97,9 @@ export default function ReportsView({ reports, loading, error, onRetry, onMarkDo
             </summary>
             <p>{report.description}</p>
             <small>Reported by {report.author || 'Resident'} · {formatDate(report.created_at)}</small>
+            {report.media_path || report.media_paths?.length
+              ? <IncidentMedia incident={report} staffIncidentId={report.incidentId} />
+              : <p className="muted">No photo or video was attached to this report.</p>}
             {onMarkDone && !['Resolved', 'Closed'].includes(report.status) && (
               <div className="modal-actions">
                 <button
@@ -105,6 +111,12 @@ export default function ReportsView({ reports, loading, error, onRetry, onMarkDo
                   {busyReportId === report.id ? <LoadingIndicator message="Saving…" compact /> : 'Mark as done'}
                 </button>
               </div>
+            )}
+            {userId && report.incidentId && (
+              <details className="report-thread">
+                <summary>Messages with the resident</summary>
+                <ReportMessages incidentId={report.incidentId} viewerId={userId} viewer="staff" />
+              </details>
             )}
             <h3>History</h3>
             {report.dispatchHistory?.length ? (
