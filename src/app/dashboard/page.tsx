@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import { RoleDashboard } from "@/components/role-dashboard";
-import { OfficialDashboard } from "@/components/official/official-dashboard";
+import { BranchOfficialDashboard } from "@/components/official/branch/branch-official-dashboard";
 import { requireRolePage } from "@/lib/auth/require-role-page";
 
 export const metadata: Metadata = { title: "Official dashboard" };
@@ -8,8 +7,6 @@ export const metadata: Metadata = { title: "Official dashboard" };
 export const dynamic = "force-dynamic";
 
 export default async function OfficialDashboardPage() {
-  const { fullName } = await requireRolePage("official");
-  return <RoleDashboard role="official" fullName={fullName}>
-    <OfficialDashboard />
-  </RoleDashboard>;
+  const { userId, email, fullName } = await requireRolePage("official");
+  return <BranchOfficialDashboard user={{ id: userId, email, fullName }} />;
 }
