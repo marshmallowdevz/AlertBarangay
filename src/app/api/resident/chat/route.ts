@@ -1,6 +1,6 @@
 import { isUserBanned } from "@/lib/auth/is-user-banned";
 import { sanitizeChatHistory } from "@/lib/chat/assistant";
-import { readGroqStream } from "@/lib/chat/groq";
+import { readSseText } from "@/lib/chat/sse";
 import { answerFromFaq, type FaqLang } from "@/lib/chat/faq";
 import { jsonError } from "@/lib/http";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -8,9 +8,12 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-// Groq (free tier) via its OpenAI-compatible API. See https://console.groq.com/docs/models
-const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
-const MODEL = process.env.GROQ_MODEL || "llama-3.1-8b-instant";
+// Google Gemini (free tier, key from aistudio.google.com) over its REST API.
+// gemini-1.5-flash has been retired by Google, so the default is its current
+// free successor; set GEMINI_MODEL to use another one.
+const MODEL = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+const geminiUrl = (model: string) =>
+  `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`;
 const REQUEST_TIMEOUT_MS = 45_000;
 
 const SYSTEM_PROMPT = `You are the AlertBarangay Assistant, a friendly helper inside the AlertBarangay app used by residents of a barangay in Cebu, Philippines.
@@ -72,57 +75,58 @@ export async function POST(request: Request) {
     return jsonError("You've sent a lot of messages. Please wait a few minutes and try again.", 429);
   }
 
-  // Plug and play: without a Groq key (or when Groq is down or over its free
+  // Plug and play: without a Gemini key (or when Gemini is down or over its free
   // quota) the assistant answers from built-in English/Filipino/Cebuano help.
   const lastQuestion = messages[messages.length - 1]?.content ?? "";
   const builtIn = () => textResponse(answerFromFaq(lastQuestion, lang));
-  const apiKey = process.env.GROQ_API_KEY?.trim();
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) return builtIn();
 
   const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
   const signal = AbortSignal.any([request.signal, timeout]);
   let upstream: Response;
   try {
-    upstream = await fetch(GROQ_URL, {
+    upstream = await fetch(geminiUrl(MODEL), {
       method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: MODEL,
-        stream: true,
-        temperature: 0.4,
-        max_tokens: 1024,
-        messages: [
-          { role: "system", content: `${SYSTEM_PROMPT}\n\nThe resident's app language is ${appLanguage}.` },
-          ...messages,
-        ],
+        systemInstruction: { parts: [{ text: `${SYSTEM_PROMPT}\n\nThe resident's app language is ${appLanguage}.` }] },
+        contents: messages.map((turn) => ({ role: turn.role === "assistant" ? "model" : "user", parts: [{ text: turn.content }] })),
+        generationConfig: {
+          temperature: 0.4,
+          maxOutputTokens: 1024,
+          // 2.5 models "think" by default; skipping it keeps replies fast and inside the free quota.
+          ...(/2\.5-flash/.test(MODEL) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+        },
       }),
       signal,
       cache: "no-store",
     });
   } catch (error) {
     if (request.signal.aborted) return new Response(null, { status: 499 });
-    console.error("[resident-chat] could not reach Groq", timeout.aborted ? "timeout" : error);
+    console.error("[resident-chat] could not reach Gemini", timeout.aborted ? "timeout" : error);
     return builtIn();
   }
 
   if (!upstream.ok || !upstream.body) {
     const detail = await upstream.text().catch(() => "");
-    if (upstream.status === 401 || upstream.status === 403) console.error("[resident-chat] GROQ_API_KEY was rejected; using built-in answers");
-    else console.error("[resident-chat] Groq request failed; using built-in answers", { status: upstream.status, detail: detail.slice(0, 300) });
+    if (upstream.status === 400 && /API key/i.test(detail) || upstream.status === 401 || upstream.status === 403) console.error("[resident-chat] GEMINI_API_KEY was rejected; using built-in answers");
+    else console.error("[resident-chat] Gemini request failed; using built-in answers", { status: upstream.status, detail: detail.slice(0, 300) });
     return builtIn();
   }
 
   const encoder = new TextEncoder();
-  const groqBody = upstream.body;
+  const geminiBody = upstream.body;
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       let wroteText = false;
       try {
-        for await (const text of readGroqStream(groqBody)) {
+        for await (const text of readSseText(geminiBody)) {
           wroteText = true;
           controller.enqueue(encoder.encode(text));
         }
-        if (!wroteText) controller.enqueue(encoder.encode("Sorry, I couldn't come up with an answer. Please try asking another way."));
+        // e.g. Gemini's safety filter returned no text: answer from the built-in help instead.
+        if (!wroteText) controller.enqueue(encoder.encode(answerFromFaq(lastQuestion, lang)));
       } catch (error) {
         if (!request.signal.aborted) {
           console.error("[resident-chat] stream failed", error);
@@ -136,7 +140,7 @@ export async function POST(request: Request) {
         try { controller.close(); } catch { /* already closed by a cancel */ }
       }
     },
-    cancel() { void groqBody.cancel().catch(() => undefined); },
+    cancel() { void geminiBody.cancel().catch(() => undefined); },
   });
 
   return textResponse(stream);

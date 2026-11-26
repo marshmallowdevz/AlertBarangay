@@ -1,5 +1,5 @@
 /**
- * Built-in answers used when no GROQ_API_KEY is configured (or Groq is down),
+ * Built-in answers used when no GEMINI_API_KEY is configured (or Gemini is down),
  * so the resident assistant works out of the box. Matches on keywords in
  * English, Filipino and Cebuano and replies in the resident's language.
  */
