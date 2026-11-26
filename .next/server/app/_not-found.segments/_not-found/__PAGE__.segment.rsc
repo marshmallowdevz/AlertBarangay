@@ -1,0 +1,32 @@
+1:"$Sreact.fragment"
+2:"/_next/static/chunks/1e8blic1djf2d.js"
+3:I[79520,["$2"],""]
+4:I[39756,["$2"],"default"]
+5:"/_next/static/chunks/0sy-m5im-t8nj.js"
+6:I[58298,["$2","$5"],"default"]
+7:I[37457,["$2"],"default"]
+8:"/_next/static/chunks/3ndwvuym-ibmy.js"
+9:I[5014,["$2","$8"],"default"]
+a:I[22016,["$2","$8"],""]
+11:I[97367,["$2"],"OutletBoundary"]
+12:"$Sreact.suspense"
+15:"ViewportBoundary"
+16:I[97367,["$2"],"$15"]
+17:"MetadataBoundary"
+18:I[97367,["$2"],"$17"]
+:HL["/_next/static/chunks/2ufaf1rhfxgam.css","style"]
+c:X
+f:X
+f:C
+10:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$1","c",{"children":[["$","main",null,{"className":"status-page","children":["$","div",null,{"className":"status-card","children":[["$","span",null,{"className":"status-icon","children":["$","$L9",null,{"icon":"$0:t:t:d:r:props:children:1:props:children:props:children:1:props:notFound:0:props:children:props:children:0:props:children:props:icon","size":22}]}],["$","h1",null,{"children":"Page not found"}],["$","p",null,{"children":"The page you were looking for doesn't exist or has moved."}],["$","div",null,{"className":"status-actions","children":["$","$La",null,{"className":"button primary","href":"/","children":"Go to start"}]}]]}]}],[["$","script","script-0",{"src":"/_next/static/chunks/3ndwvuym-ibmy.js","async":true}]],["$","$L11",null,{"children":["$","$12",null,{"name":"Next.MetadataOutlet","children":"$@13"}]}]]}],"p":"$@14","v":null,"s":"$c"}}]]
+d:[["children",{"s":"/_not-found","h":96,"d":{"r":["$","$1","c",{"children":[null,["$","$L4",null,{"parallelRouterKey":"children","template":["$","$L7",null,{}]}]]}],"p":"$@e","v":"$f","s":"$c"},"c":"$Q10"}]]
+0:{"t":{"t":{"s":"","h":80,"d":{"r":["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/chunks/2ufaf1rhfxgam.css","precedence":"next"}],["$","script","script-0",{"src":"/_next/static/chunks/1e8blic1djf2d.js","async":true}]],["$","html",null,{"lang":"en","suppressHydrationWarning":true,"children":["$","body",null,{"children":[["$","$L3",null,{"id":"theme-boot","strategy":"beforeInteractive","dangerouslySetInnerHTML":{"__html":"(function(){try{var t=localStorage.getItem(\"alertbarangay-theme\");var d=t===\"dark\"||((!t||t===\"system\")&&window.matchMedia(\"(prefers-color-scheme: dark)\").matches);document.documentElement.dataset.theme=d?\"dark\":\"light\";}catch(e){}})();"}}],["$","$L4",null,{"parallelRouterKey":"children","error":"$6","errorStyles":[],"errorScripts":[["$","script","script-0",{"src":"/_next/static/chunks/0sy-m5im-t8nj.js","async":true}]],"template":["$","$L7",null,{}],"notFound":[["$","main",null,{"className":"status-page","children":["$","div",null,{"className":"status-card","children":[["$","span",null,{"className":"status-icon","children":["$","$L9",null,{"icon":{"name":"compass","size":24,"node":[["circle",{"cx":"12","cy":"12","r":"10","key":"1mglay"}],["path",{"d":"m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z","key":"9ktpf1"}]]},"size":22}]}],["$","h1",null,{"children":"Page not found"}],["$","p",null,{"children":"The page you were looking for doesn't exist or has moved."}],["$","div",null,{"className":"status-actions","children":["$","$La",null,{"className":"button primary","href":"/","children":"Go to start"}]}]]}]}],[]]}]]}]}]]}],"p":"$@b","v":null,"s":"$c"},"c":"$Qd"},"h":{"r":["$","$1","h",{"children":[["$","meta",null,{"name":"robots","content":"noindex"}],["$","$L16",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}],["$","meta","2",{"name":"theme-color","content":"#4A101E"}]]}],["$","$L18",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$12",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"AlertBarangay"}],["$","meta","1",{"name":"description","content":"Report emergencies and coordinate barangay response."}],["$","meta","2",{"name":"robots","content":"noindex, nofollow"}]]}]}],null]}],null]}],"p":"$@19","v":null,"s":"$c"}},"a":"$@1a","u":"$@1b","b":"I4A1F9pHBrbgGL5QfLr97"}
+13:null
+c:300
+1b:true
+c:C
+1a:0
+e:"$undefined"
+b:"$undefined"
+19:"$undefined"
+14:"$undefined"
