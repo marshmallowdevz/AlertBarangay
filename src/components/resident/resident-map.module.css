@@ -1,0 +1,40 @@
+.mapPage{display:grid;gap:16px}
+.toolbar{display:flex;justify-content:space-between;align-items:center;gap:16px}
+.toolbar h2{display:flex;align-items:center;gap:9px;margin:0;font:700 17px Manrope,sans-serif;color:var(--ink)}
+.toolbar h2 svg{color:var(--maroon)}
+.toolbar p{margin:6px 0 0;color:var(--muted);font-size:12px;line-height:1.5}
+.actions{display:flex;gap:8px;align-items:center}
+.mapLayout{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:14px;align-items:start}
+.mapCard{position:relative;overflow:hidden;min-width:0;height:min(68vh,680px);min-height:400px;border:1px solid var(--border);border-radius:14px;background:#e8e4dc;box-shadow:var(--shadow)}
+.canvas{width:100%;height:100%;min-height:400px}
+.mapFallback{display:grid;place-items:center;height:100%;padding:24px;color:var(--muted);text-align:center;font-size:13px}
+.locate{position:absolute;z-index:400;top:12px;left:12px;width:40px;height:40px;padding:0!important;background:var(--card)!important}
+.reportPanel{padding:17px;display:grid;gap:12px}
+.reportPanel h3{margin:0;font:700 13px Manrope,sans-serif}
+.mapMessage,.mapHint{margin:0;color:var(--muted);font-size:11px;line-height:1.55}
+.mapHint{padding-top:10px;border-top:1px solid var(--border)}
+.reportForm{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:18px}
+.formHeading{grid-column:1/-1;display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.formHeading h3{margin:0;font:700 14px Manrope,sans-serif}
+.formHeading p{margin:5px 0 0;color:var(--muted);font-size:11px}
+.close{display:grid;place-items:center;width:34px;height:34px;border:1px solid var(--border);border-radius:8px;background:var(--ivory);color:var(--muted)}
+.field{display:grid;align-content:start;gap:7px;color:var(--ink);font-size:11px;font-weight:700}
+.field input,.field select,.field textarea{width:100%;min-height:38px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--ink);font:400 12px 'DM Sans',sans-serif}
+.field textarea{resize:vertical}
+.field input[type=file]{padding:7px;font-size:10px}
+.field small{color:var(--muted);font-size:10px;font-weight:400;line-height:1.4}
+.field .locationText{margin:0;color:var(--muted);font-size:11px;font-weight:400}
+.fileList{grid-column:1/-1;display:grid;gap:6px;margin:0;padding:0;list-style:none}
+.fileList li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:7px 9px;border:1px solid var(--border);border-radius:7px;font-size:10px}
+.fileList li span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fileList button{display:grid;place-items:center;width:27px;height:27px;flex:none;border:0;border-radius:6px;background:var(--ivory);color:var(--muted)}
+.reportForm>button[type=submit]{grid-column:1/-1;justify-self:start}
+.success{margin:0;padding:12px 14px;border:1px solid #c6dfce;border-radius:9px;background:#edf7f0;color:#28663f;font-size:12px}
+:global(.resident-map-marker-wrap){border:0;background:transparent}
+:global(.resident-map-marker){display:block;width:27px;height:34px;position:relative;border:3px solid white;border-radius:50% 50% 50% 4px;background:var(--marker-color);box-shadow:0 2px 6px #211a1760;transform:rotate(-45deg)}
+:global(.resident-map-marker)::after{content:"";position:absolute;inset:7px;border:2px solid #ffffffbd;border-radius:50%}
+:global(.resident-map-popup){min-width:150px;color:#231815;font:12px 'DM Sans',sans-serif}
+:global(.resident-map-popup strong){display:block;margin-bottom:4px}
+:global(.resident-map-popup p){margin:4px 0;line-height:1.4}
+@media(max-width:900px){.mapLayout{grid-template-columns:1fr}.mapCard{height:58vh;min-height:360px}.reportPanel{grid-template-columns:1fr 1fr}.reportPanel h3{grid-column:1/-1}}
+@media(max-width:650px){.toolbar{align-items:flex-start;flex-direction:column}.actions{width:100%}.actions .button{flex:1}.reportForm{grid-template-columns:1fr;padding:15px}.formHeading,.fileList,.reportForm>button[type=submit]{grid-column:1}.reportPanel{grid-template-columns:1fr}.mapCard{height:52vh;min-height:320px}}

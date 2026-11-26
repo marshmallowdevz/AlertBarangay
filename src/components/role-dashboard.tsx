@@ -3,7 +3,7 @@
 import { Suspense, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, LogOut, ShieldCheck, UserRound } from "lucide-react";
+import { Clapperboard, LayoutDashboard, LifeBuoy, LogOut, MapPinned, ShieldCheck, UserRound } from "lucide-react";
 import type { AppRole } from "@/lib/auth/roles";
 import { getRoleDashboardPath } from "@/lib/auth/roles";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -60,7 +60,12 @@ export function RoleDashboard({ role, userId, fullName, title, subtitle, childre
         <span><strong>AlertBarangay</strong><small>{roleLabel.toUpperCase()}</small></span>
       </Link>
       <nav className="role-nav" aria-label="Main navigation">
-        <Link href={home} className={pathname === home ? "active" : undefined} aria-current={pathname === home ? "page" : undefined}><LayoutDashboard size={15} /><span>{t("nav.dashboard")}</span></Link>
+        {role === "resident" ? <>
+          <Link href={home} className={pathname === home ? "active" : undefined} aria-current={pathname === home ? "page" : undefined}><LayoutDashboard size={15} /><span>{t("nav.dashboard")}</span></Link>
+          <Link href="/resident/community" className={pathname === "/resident/community" ? "active" : undefined} aria-current={pathname === "/resident/community" ? "page" : undefined}><Clapperboard size={15} /><span>{t("nav.community")}</span></Link>
+          <Link href="/resident/map" className={pathname === "/resident/map" ? "active" : undefined} aria-current={pathname === "/resident/map" ? "page" : undefined}><MapPinned size={15} /><span>{t("nav.map")}</span></Link>
+          <Link href="/resident/safety" className={pathname === "/resident/safety" ? "active" : undefined} aria-current={pathname === "/resident/safety" ? "page" : undefined}><LifeBuoy size={15} /><span>{t("nav.safety")}</span></Link>
+        </> : <Link href={home} className={pathname === home ? "active" : undefined} aria-current={pathname === home ? "page" : undefined}><LayoutDashboard size={15} /><span>{t("nav.dashboard")}</span></Link>}
         <Link href="/account" className={pathname === "/account" ? "active" : undefined} aria-current={pathname === "/account" ? "page" : undefined}><UserRound size={15} /><span>{t("nav.account")}</span></Link>
         {role === "resident" && <LanguageSwitcher />}
         {role === "resident" && userId && <NotificationBell userId={userId} />}

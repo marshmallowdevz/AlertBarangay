@@ -4,7 +4,7 @@ AlertBarangay connects residents and barangay officials for faster emergency res
 
 | Role | Signs in at | Lands on | Can do |
 | --- | --- | --- | --- |
-| Resident | `/login` (or signs up there) | `/resident` | Report an emergency (type, description, GPS or typed address, optional photo/video), follow report status live, read announcements, edit account |
+| Resident | `/login` (or signs up there) | `/resident/dashboard` | Report emergencies, follow status and private report messages, read announcements, share community Reels, view the incident map, use safety contacts and edit account |
 | Barangay official | `/login` | `/dashboard` | See incidents live, filter/search them, see who reported, mark them responding or resolved, edit account |
 | Admin | `/login` | `/admin` | Manage accounts and roles, publish announcements, maintenance mode, edit profile |
 
@@ -46,6 +46,8 @@ Routing always uses the account's real role in `public.profiles.role`. The Resid
    | `202611260002_resident_only_signup_and_role_rls.sql` | Public sign-up always creates residents (role metadata is stripped); only active residents can file reports |
    | `202611260003_report_messages.sql` | Private resident ↔ barangay messages on each report, with notifications and live updates |
 
+   | `20261126120000_resident_community_rls.sql` | Active-resident-only access to community posts and private community media |
+
 4. Create the first admin: create a user under **Authentication > Users**, then in the SQL Editor:
 
    ```sql
@@ -72,7 +74,7 @@ Routing always uses the account's real role in `public.profiles.role`. The Resid
 - **Row-level security everywhere.** Browsers use only the publishable key; what they can read or write is decided by the policies in the migrations.
 - **Roles live in `public.profiles`.** Browsers can update only their own `full_name` and `avatar_url`; a trigger blocks role and status changes from the browser. Admin account changes go through `/api/admin/*` routes, which re-check that the caller is an active admin before using the server-only secret key.
 - **Sign-up is for residents only.** The public form only creates resident accounts; the database trigger sets `role = 'resident'` whatever the browser sends. Official and admin accounts are created by an admin in **Admin > User management**.
-- **One dashboard per role:** `/resident/dashboard`, `/official/dashboard`, `/admin/dashboard`. The sign-in tab must match the account (the resident portal tab, labeled "Admin": residents only; Barangay Official tab: officials and admins), otherwise sign-in is refused with a message naming the right tab. Tab labels live in `portalLabels` in `src/lib/auth/roles.ts`.
+- **One dashboard per role:** `/resident/dashboard`, `/official/dashboard`, `/admin/dashboard`. Residents also use protected `/resident/community`, `/resident/map`, and `/resident/safety` pages in this same app. The sign-in tab must match the account (the resident portal tab, labeled "Admin": residents only; Barangay Official tab: officials and admins), otherwise sign-in is refused with a message naming the right tab. Tab labels live in `portalLabels` in `src/lib/auth/roles.ts`.
 - **`src/proxy.ts`** (Next.js 16's name for middleware) refreshes the session cookie, sends each role to its own area (opening another role's area redirects to your own dashboard with a notice), enforces maintenance mode, and blocks cross-site writes to `/api`. Pages re-check role and active status on the server too.
 - **Private incident media.** Only the reporter and active staff can open incident photos and videos (signed links that expire after 10 minutes).
 - **Password changes** require the current password. Password resets use Supabase's emailed one-time link (`/auth/reset`).
@@ -90,15 +92,19 @@ Routing always uses the account's real role in `public.profiles.role`. The Resid
 
 ```
 src/
-  app/                 routes: login, auth/reset, resident, dashboard (officials), account, admin/*, api/admin/*
+  app/                 routes: login, auth/reset, resident/*, dashboard (officials), account, admin/*, api/admin/*
   components/          UI: account/, admin/, official/, resident/ plus shared pieces
   lib/                 auth (roles, guards), supabase clients, incidents, theme, fetch helpers
   lib/__tests__/       unit tests
   proxy.ts             request-level auth, role routing, maintenance mode, CSRF check
 supabase/migrations/   database schema and security policies
-android/               Capacitor shell for the Android app
+resident-app/          Legacy Vite resident app and Capacitor Android rollback material; not the active resident experience
 ```
+
+## Active resident experience
+
+The root Next.js App Router app is the source of truth for resident sign-in and features. A resident signs in at `/login` and enters `/resident/dashboard`; the community feed, incident map, safety contacts, account, notifications and per-report chat use the same authenticated session. `resident-app/` is the legacy standalone Vite app and its Capacitor wrapper is retained only as rollback material. It is not a second active authentication or incident workflow.
 
 ## Android app
 
-The Android project is a Capacitor shell that loads the deployed site (the app needs its server for sign-in and the admin API). Set `server.url` in `capacitor.config.json` to your deployed HTTPS URL, then run `npx cap sync android` and build in Android Studio.
+The legacy Android project under `resident-app/android` is a Capacitor shell configured to load a deployed site. Keep its existing deployment URL unchanged as rollback material. The root Next.js app remains the active resident experience.

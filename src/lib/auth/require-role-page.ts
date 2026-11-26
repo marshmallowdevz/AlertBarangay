@@ -1,7 +1,8 @@
 import "server-only";
 
 import { redirect } from "next/navigation";
-import { getRoleDashboardPath, isAppRole, type AppRole } from "@/lib/auth/roles";
+import { type AppRole } from "@/lib/auth/roles";
+import { getRolePageRedirect } from "@/lib/auth/role-page-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 /**
@@ -15,8 +16,8 @@ export async function requireRolePage(role: AppRole | AppRole[]) {
   if (!user) redirect("/login");
   const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
   const isBanned = Boolean(user.banned_until && new Date(user.banned_until).getTime() > Date.now());
-  if (!profile || isBanned || profile.is_active === false || !isAppRole(profile.role)) redirect("/login?notice=role");
-  if (!allowed.includes(profile.role)) redirect(getRoleDashboardPath(profile.role) ?? "/login?notice=role");
+  const redirectTo = getRolePageRedirect(profile, isBanned, allowed);
+  if (redirectTo) redirect(redirectTo);
   return {
     userId: user.id,
     email: user.email ?? "",

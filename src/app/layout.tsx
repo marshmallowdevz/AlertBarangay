@@ -8,6 +8,7 @@ import { themeBootScript } from "@/lib/theme";
 import { I18nProvider } from "@/lib/i18n/provider";
 import { LANG_COOKIE, isLang } from "@/lib/i18n/messages";
 import "./globals.css";
+import "leaflet/dist/leaflet.css";
 
 export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
