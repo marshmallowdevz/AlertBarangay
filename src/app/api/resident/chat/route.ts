@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { isUserBanned } from "@/lib/auth/is-user-banned";
 import { sanitizeChatHistory } from "@/lib/chat/assistant";
+import { localAssistantReply } from "@/lib/chat/local-assistant";
 import { jsonError } from "@/lib/http";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -64,11 +65,6 @@ export async function POST(request: Request) {
     return jsonError("The assistant is available to resident accounts only.", 403);
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.error("[resident-chat] ANTHROPIC_API_KEY is not set");
-    return jsonError("The assistant isn't set up yet. Please contact your barangay administrator.", 503);
-  }
-
   const body = await request.json().catch(() => null) as { messages?: unknown; lang?: unknown } | null;
   const appLanguage = body?.lang === "fil" ? "Filipino" : body?.lang === "ceb" ? "Cebuano" : "English";
   const messages = sanitizeChatHistory(body?.messages);
@@ -76,6 +72,16 @@ export async function POST(request: Request) {
 
   if (rateLimited(user.id)) {
     return jsonError("You've sent a lot of messages. Please wait a few minutes and try again.", 429);
+  }
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return new Response(localAssistantReply(messages, body?.lang === "fil" || body?.lang === "ceb" ? body.lang : "en"), {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
   }
 
   const encoder = new TextEncoder();

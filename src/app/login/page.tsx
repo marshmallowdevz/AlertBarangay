@@ -33,9 +33,9 @@ function withTimeout<T>(promise: Promise<T>): Promise<T> {
   });
 }
 
-const portalCopy: Record<PortalChoice, { eyebrow: MessageKey; intro: MessageKey }> = {
-  resident: { eyebrow: "login.portal.resident.eyebrow", intro: "login.portal.resident.intro" },
-  official: { eyebrow: "login.portal.official.eyebrow", intro: "login.portal.official.intro" },
+const portalCopy: Record<PortalChoice, { intro: MessageKey }> = {
+  resident: { intro: "login.portal.resident.intro" },
+  official: { intro: "login.portal.official.intro" },
 };
 
 const noticeKeys: Record<string, MessageKey> = {
@@ -243,9 +243,10 @@ export default function LoginPage() {
       }
       // The chosen tab must match the account's real role (from profiles.role).
       // Wrong portal: sign straight back out and say which tab to use.
-      if (!portalAllowsRole(portal, result.role)) {
+      const selectedPortal = window.matchMedia("(max-width: 900px)").matches ? "resident" : portal;
+      if (!portalAllowsRole(selectedPortal, result.role)) {
         await supabase.auth.signOut();
-        setMessage({ kind: "error", text: wrongPortalMessage(portal, result.role) });
+        setMessage({ kind: "error", text: wrongPortalMessage(selectedPortal, result.role) });
         return;
       }
       setRedirecting(true);
@@ -271,7 +272,7 @@ export default function LoginPage() {
   const resetting = mode === "reset";
   const copy = portalCopy[portal];
   const heading = signingUp ? t("login.heading.signUp") : resetting ? t("login.heading.reset") : t("login.heading.signIn");
-  const eyebrow = signingUp ? t("login.eyebrow.signUp") : resetting ? t("login.eyebrow.reset") : t(copy.eyebrow);
+  const eyebrow = signingUp ? t("login.eyebrow.signUp") : resetting ? t("login.eyebrow.reset") : "";
   const intro = signingUp ? t("login.intro.signUp") : resetting ? t("login.intro.reset") : t(copy.intro);
 
   return <main className={`ab-login ${screen === "auth" ? "is-auth" : "is-landing"}`} data-auth-mode={screen === "auth" ? mode : undefined}>
@@ -291,7 +292,7 @@ export default function LoginPage() {
           <h2 id="welcome-title">{t("login.welcome.title")}</h2>
           <p className="welcome-subtitle">{t("login.welcome.subtitle")}</p>
           <div className="welcome-actions">
-            <button className="welcome-button" type="button" onClick={() => { setPortal("resident"); openAuth("sign-up"); }}>{t("login.welcome.signUp")}</button>
+            <button className="welcome-button mobile-signup-cta" type="button" onClick={() => { setPortal("resident"); openAuth("sign-up"); }}>{t("login.welcome.signUp")}</button>
             <button className="welcome-button" type="button" onClick={() => openAuth("sign-in")}>{t("login.welcome.signIn")}</button>
           </div>
           <CardWaves />
@@ -303,7 +304,7 @@ export default function LoginPage() {
       <div className="form-wrap">
         <button className="auth-back" type="button" aria-label={t("login.back")} onClick={backToLanding}>&larr;</button>
         <span className="auth-mark" aria-hidden="true"><ShieldIcon /></span>
-        <p className="eyebrow">{eyebrow}</p>
+        {eyebrow && <p className="eyebrow">{eyebrow}</p>}
         <h1 id="form-title" tabIndex={-1}>{heading}</h1>
         <p className="intro">{intro}</p>
 

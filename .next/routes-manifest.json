@@ -80,6 +80,14 @@
         "nxtPid": "nxtPid"
       },
       "namedRegex": "^/api/official/incidents/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/official/incidents/[id]/media",
+      "regex": "^/api/official/incidents/([^/]+?)/media(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/official/incidents/(?<nxtPid>[^/]+?)/media(?:/)?$"
     }
   ],
   "staticRoutes": [
@@ -114,10 +122,22 @@
       "namedRegex": "^/admin(?:/)?$"
     },
     {
+      "page": "/admin/analytics",
+      "regex": "^/admin/analytics(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/analytics(?:/)?$"
+    },
+    {
       "page": "/admin/announcements",
       "regex": "^/admin/announcements(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/admin/announcements(?:/)?$"
+    },
+    {
+      "page": "/admin/dashboard",
+      "regex": "^/admin/dashboard(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/dashboard(?:/)?$"
     },
     {
       "page": "/admin/profile",
@@ -168,10 +188,22 @@
       "namedRegex": "^/api/admin/users(?:/)?$"
     },
     {
+      "page": "/api/official/analytics",
+      "regex": "^/api/official/analytics(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/official/analytics(?:/)?$"
+    },
+    {
       "page": "/api/official/dispatches",
       "regex": "^/api/official/dispatches(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/official/dispatches(?:/)?$"
+    },
+    {
+      "page": "/api/resident/chat",
+      "regex": "^/api/resident/chat(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/resident/chat(?:/)?$"
     },
     {
       "page": "/auth/reset",
@@ -198,10 +230,28 @@
       "namedRegex": "^/maintenance(?:/)?$"
     },
     {
+      "page": "/official",
+      "regex": "^/official(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/official(?:/)?$"
+    },
+    {
+      "page": "/official/dashboard",
+      "regex": "^/official/dashboard(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/official/dashboard(?:/)?$"
+    },
+    {
       "page": "/resident",
       "regex": "^/resident(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/resident(?:/)?$"
+    },
+    {
+      "page": "/resident/dashboard",
+      "regex": "^/resident/dashboard(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/resident/dashboard(?:/)?$"
     }
   ],
   "dataRoutes": [],

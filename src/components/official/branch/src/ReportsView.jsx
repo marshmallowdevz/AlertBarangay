@@ -50,7 +50,8 @@ export default function ReportsView({ reports, loading, error, onRetry, onMarkDo
       await onMarkDone({ reportId: report.id, note: '' });
     } catch (err) {
       console.error('Unable to mark the report as done.', err);
-      setActionError(`The report could not be marked as done: ${err.message || 'An unexpected error occurred.'}`);
+      const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
+      setActionError(`The report could not be marked as done: ${message}`);
     } finally {
       setBusyReportId('');
     }

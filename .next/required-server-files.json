@@ -105,7 +105,7 @@
         "transform": "lodash/{{member}}"
       }
     },
-    "outputFileTracingRoot": "E:\\DOWNLOADS\\larp\\AlertBarangay",
+    "outputFileTracingRoot": "C:\\Users\\Aleyah\\Documents\\GitHub\\ZAMDevs\\AlertBarangay",
     "enablePrerenderSourceMaps": true,
     "cacheComponents": false,
     "cacheLife": {
@@ -181,7 +181,7 @@
       "proxyPrefetch": "flexible",
       "optimisticClientCache": true,
       "manualClientBasePath": false,
-      "cpus": 15,
+      "cpus": 19,
       "memoryBasedWorkersCount": false,
       "imgOptConcurrency": null,
       "imgOptOperationCache": null,
@@ -334,13 +334,13 @@
     "htmlLimitedBots": "[\\w-]+-Google|Google-[\\w-]+|Chrome-Lighthouse|Slurp|DuckDuckBot|baiduspider|yandex|sogou|bitlybot|tumblr|vkShare|quora link preview|redditbot|ia_archiver|Bingbot|BingPreview|applebot|facebookexternalhit|facebookcatalog|Twitterbot|LinkedInBot|Slackbot|Discordbot|WhatsApp|SkypeUriPreview|Yeti|googleweblight",
     "bundlePagesRouterDependencies": false,
     "configFileName": "next.config.ts",
-    "repoRoot": "E:\\DOWNLOADS\\larp\\AlertBarangay",
+    "repoRoot": "C:\\Users\\Aleyah\\Documents\\GitHub\\ZAMDevs\\AlertBarangay",
     "turbopack": {
-      "root": "E:\\DOWNLOADS\\larp\\AlertBarangay"
+      "root": "C:\\Users\\Aleyah\\Documents\\GitHub\\ZAMDevs\\AlertBarangay"
     },
     "distDirRoot": ".next"
   },
-  "appDir": "E:\\DOWNLOADS\\larp\\AlertBarangay",
+  "appDir": "C:\\Users\\Aleyah\\Documents\\GitHub\\ZAMDevs\\AlertBarangay",
   "relativeAppDir": "",
   "files": [
     ".next\\package.json",

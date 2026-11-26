@@ -20,9 +20,7 @@ const en = {
   "lang.label": "Language",
 
   // Login
-  "login.portal.resident.eyebrow": "Resident portal",
   "login.portal.resident.intro": "Sign in to report incidents and follow advisories.",
-  "login.portal.official.eyebrow": "Barangay official portal",
   "login.portal.official.intro": "Sign in to manage reports and respond to incidents.",
   "login.heading.signIn": "Hello Welcome Back!",
   "login.heading.signUp": "Create Your Resident Account",
@@ -58,7 +56,7 @@ const en = {
   "login.landing.subtitle": "One platform connecting residents and barangay officials for faster, clearer emergency response.",
   "login.welcome.title": "Get Started",
   "login.welcome.subtitle": "Residents can sign up. Officials sign in with the account from their administrator.",
-  "login.welcome.signUp": "Sign Up as Resident",
+  "login.welcome.signUp": "Sign Up",
   "login.welcome.signIn": "Sign In",
   "login.checking": "Checking your session…",
   "login.err.enterEmail": "Enter the email address of your account.",
@@ -222,9 +220,7 @@ type Dictionary = Record<MessageKey, string>;
 const fil: Dictionary = {
   "lang.label": "Wika",
 
-  "login.portal.resident.eyebrow": "Portal ng residente",
   "login.portal.resident.intro": "Mag-sign in para mag-ulat ng insidente at sumubaybay sa mga abiso.",
-  "login.portal.official.eyebrow": "Portal ng opisyal ng barangay",
   "login.portal.official.intro": "Mag-sign in para pamahalaan ang mga ulat at tumugon sa mga insidente.",
   "login.heading.signIn": "Maligayang Pagbabalik!",
   "login.heading.signUp": "Gumawa ng Account bilang Residente",
@@ -260,7 +256,7 @@ const fil: Dictionary = {
   "login.landing.subtitle": "Isang plataporma na nag-uugnay sa mga residente at opisyal ng barangay para sa mas mabilis at mas malinaw na pagtugon sa emergency.",
   "login.welcome.title": "Magsimula",
   "login.welcome.subtitle": "Puwedeng mag-sign up ang mga residente. Ang mga opisyal ay mag-sign in gamit ang account mula sa kanilang administrator.",
-  "login.welcome.signUp": "Mag-sign Up bilang Residente",
+  "login.welcome.signUp": "Mag-sign Up",
   "login.welcome.signIn": "Mag-sign In",
   "login.checking": "Sinusuri ang iyong session…",
   "login.err.enterEmail": "Ilagay ang email address ng iyong account.",
@@ -414,9 +410,7 @@ const fil: Dictionary = {
 const ceb: Dictionary = {
   "lang.label": "Pinulongan",
 
-  "login.portal.resident.eyebrow": "Portal sa residente",
   "login.portal.resident.intro": "Pag-sign in aron mo-report og insidente ug mosubay sa mga pahibalo.",
-  "login.portal.official.eyebrow": "Portal sa opisyal sa barangay",
   "login.portal.official.intro": "Pag-sign in aron madumala ang mga report ug motubag sa mga insidente.",
   "login.heading.signIn": "Maayong Pagbalik!",
   "login.heading.signUp": "Paghimo og Account isip Residente",
@@ -452,7 +446,7 @@ const ceb: Dictionary = {
   "login.landing.subtitle": "Usa ka plataporma nga nagdugtong sa mga residente ug opisyal sa barangay para sa mas paspas ug mas klaro nga pagtubag sa emergency.",
   "login.welcome.title": "Magsugod",
   "login.welcome.subtitle": "Makapag-sign up ang mga residente. Ang mga opisyal mag-sign in gamit ang account gikan sa ilang administrator.",
-  "login.welcome.signUp": "Mag-sign Up isip Residente",
+  "login.welcome.signUp": "Mag-sign Up",
   "login.welcome.signIn": "Mag-sign In",
   "login.checking": "Gisusi ang imong session…",
   "login.err.enterEmail": "Ibutang ang email address sa imong account.",
