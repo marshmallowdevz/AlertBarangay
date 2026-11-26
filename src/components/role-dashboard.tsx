@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { Suspense, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LayoutDashboard, LogOut, ShieldCheck, UserRound } from "lucide-react";
 import type { AppRole } from "@/lib/auth/roles";
 import { getRoleDashboardPath } from "@/lib/auth/roles";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { LoadingButton } from "@/components/ui/loading-button";
+import { AccessNotice } from "@/components/ui/access-notice";
 
 const roleLabels: Record<AppRole, string> = {
   admin: "Administrator",
@@ -48,6 +50,7 @@ export function RoleDashboard({ role, fullName, title, subtitle, children }: {
     : "Review incoming incidents and update their response status.");
 
   return <div className="role-shell">
+    <Suspense fallback={null}><AccessNotice /></Suspense>
     <header className="role-header">
       <Link href={home} className="brand-lockup role-brand">
         <span className="brand-badge"><ShieldCheck size={20} /></span>
@@ -56,7 +59,7 @@ export function RoleDashboard({ role, fullName, title, subtitle, children }: {
       <nav className="role-nav" aria-label="Main navigation">
         <Link href={home} className={pathname === home ? "active" : undefined} aria-current={pathname === home ? "page" : undefined}><LayoutDashboard size={15} /><span>Dashboard</span></Link>
         <Link href="/account" className={pathname === "/account" ? "active" : undefined} aria-current={pathname === "/account" ? "page" : undefined}><UserRound size={15} /><span>Account</span></Link>
-        <button type="button" onClick={() => void signOut()} disabled={signingOut}><LogOut size={15} /><span>{signingOut ? "Signing out…" : "Sign out"}</span></button>
+        <LoadingButton type="button" onClick={() => void signOut()} loading={signingOut} loadingText="Signing out…"><LogOut size={15} /><span>Sign out</span></LoadingButton>
       </nav>
     </header>
     <main className="role-main">

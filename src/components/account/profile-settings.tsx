@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, CheckCircle2, KeyRound, Save, ShieldCheck } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { LoadingButton } from "@/components/ui/loading-button";
 
 const maxPhotoBytes = 3 * 1024 * 1024;
 const photoTypes = ["image/jpeg", "image/png", "image/webp"];
@@ -110,7 +111,7 @@ export function ProfileSettings({ email, initialName, initialAvatarUrl, embedded
           <label className="field"><span>Name</span><input value={name} maxLength={120} onChange={(event) => setName(event.target.value)} required /></label>
           <label className="field"><span>Email</span><input value={email} readOnly /><small className="field-hint">Email is managed by your sign-in provider.</small></label>
           {profileError && <div className="inline-error" role="alert">{profileError}</div>}{profileSuccess && <div className="profile-success" role="status"><CheckCircle2 size={15} />{profileSuccess}</div>}
-          <button className="button primary profile-form-save" disabled={profileBusy}><Save size={15} />{profileBusy ? "Saving…" : "Save profile"}</button>
+          <LoadingButton className="button primary profile-form-save" loading={profileBusy} loadingText="Saving…"><Save size={15} />Save profile</LoadingButton>
         </form>
       </section>
       <section className="profile-settings-card" aria-labelledby="password-title">
@@ -120,7 +121,7 @@ export function ProfileSettings({ email, initialName, initialAvatarUrl, embedded
           <label className="field"><span>New password</span><input type="password" autoComplete="new-password" minLength={12} value={password} onChange={(event) => setPassword(event.target.value)} required /><small className="field-hint">Use at least 12 characters.</small></label>
           <label className="field"><span>Confirm new password</span><input type="password" autoComplete="new-password" minLength={12} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required /></label>
           {passwordError && <div className="inline-error" role="alert">{passwordError}</div>}{passwordSuccess && <div className="profile-success" role="status"><CheckCircle2 size={15} />{passwordSuccess}</div>}
-          <button className="button primary profile-form-save" disabled={passwordBusy}><ShieldCheck size={15} />{passwordBusy ? "Updating…" : "Update password"}</button>
+          <LoadingButton className="button primary profile-form-save" loading={passwordBusy} loadingText="Updating…"><ShieldCheck size={15} />Update password</LoadingButton>
         </form>
       </section>
     </div>

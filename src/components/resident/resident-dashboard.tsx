@@ -8,6 +8,7 @@ import {
 import { AnnouncementsFeed } from "@/components/announcements-feed";
 import { IncidentMedia } from "@/components/incident-media";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { LoadingButton } from "@/components/ui/loading-button";
 import {
   checkMediaFile, describeLocation, getCurrentPosition, incidentColumns, incidentTypes, mapLink,
   MAX_DESCRIPTION, MAX_LOCATION_TEXT, statusLabels, timeAgo, typeLabels, uploadIncidentMedia, type Incident, type IncidentType,
@@ -157,7 +158,7 @@ export function ResidentDashboard({ userId }: { userId: string }) {
             <span className="field-label">3. Where is it?</span>
             {position
               ? <div className="location-chip"><MapPin size={14} /> GPS location captured · <a href={mapLink(position) ?? "#"} target="_blank" rel="noreferrer">check on map</a> <button type="button" className="link-button" onClick={() => setPosition(null)}>Remove</button></div>
-              : <button type="button" className="button secondary" onClick={() => void locate()} disabled={locating}><LocateFixed size={15} />{locating ? "Finding you…" : "Use my current location"}</button>}
+              : <LoadingButton type="button" className="button secondary" onClick={() => void locate()} loading={locating} loadingText="Finding you…"><LocateFixed size={15} />Use my current location</LoadingButton>}
             <label className="sr-only" htmlFor="incident-address">Address or landmark</label>
             <input id="incident-address" className="text-input" maxLength={MAX_LOCATION_TEXT} value={locationText} onChange={(e) => setLocationText(e.target.value)} placeholder={position ? "Add a landmark (optional), e.g. beside the chapel" : "Or type the address / nearest landmark"} />
           </div>
@@ -172,7 +173,7 @@ export function ResidentDashboard({ userId }: { userId: string }) {
 
           {formError && <div className="inline-error" role="alert">{formError}</div>}
           {success && <div className="success-note" role="status"><CheckCircle2 size={15} />{success}</div>}
-          <button className="button primary submit-report" disabled={submitting}><Send size={15} />{submitting ? "Sending report…" : "Send report"}</button>
+          <LoadingButton className="button primary submit-report" loading={submitting} loadingText="Sending report…"><Send size={15} />Send report</LoadingButton>
         </form>
       </section>
 

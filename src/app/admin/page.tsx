@@ -1,12 +1,5 @@
-import type { Metadata } from "next";
-import { AccountOverview } from "@/components/admin/account-overview";
-import { getAdminUserDirectory } from "@/lib/admin/user-directory";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Admin overview" };
-
-export const dynamic = "force-dynamic";
-
-export default async function AdminOverviewPage() {
-  const { metrics } = await getAdminUserDirectory();
-  return <AccountOverview metrics={metrics} />;
+export default function AdminIndexPage() {
+  redirect("/admin/dashboard");
 }

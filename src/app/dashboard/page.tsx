@@ -1,12 +1,11 @@
-import type { Metadata } from "next";
-import { BranchOfficialDashboard } from "@/components/official/branch/branch-official-dashboard";
+import { redirect } from "next/navigation";
 import { requireRolePage } from "@/lib/auth/require-role-page";
-
-export const metadata: Metadata = { title: "Official dashboard" };
+import { getRoleDashboardPath } from "@/lib/auth/roles";
 
 export const dynamic = "force-dynamic";
 
-export default async function OfficialDashboardPage() {
-  const { userId, email, fullName } = await requireRolePage("official");
-  return <BranchOfficialDashboard user={{ id: userId, email, fullName }} />;
+/** Old shared /dashboard link: send every account to its own role dashboard. */
+export default async function DashboardRedirectPage() {
+  const { role } = await requireRolePage(["resident", "official", "admin"]);
+  redirect(getRoleDashboardPath(role) ?? "/login?notice=role");
 }

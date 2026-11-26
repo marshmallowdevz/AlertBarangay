@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { dashboardForUser } from "@/lib/auth/dashboard-for-user";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import "../../login/login.css";
+import { LoadingButton } from "@/components/ui/loading-button";
 
 type Stage = "checking" | "ready" | "invalid";
 
@@ -63,7 +64,7 @@ export default function ResetPasswordPage() {
             <label htmlFor="confirm-new-password">Confirm new password</label>
             <input id="confirm-new-password" type="password" autoComplete="new-password" minLength={8} required value={confirm} onChange={(e) => setConfirm(e.target.value)} />
           </div>
-          <button className="submit" type="submit" disabled={busy}>{busy ? "Saving…" : "Save new password"}</button>
+          <LoadingButton className="submit" loading={busy} loadingText="Saving…">Save new password</LoadingButton>
           <p className="form-message" role="alert" data-visible={error ? "true" : undefined}>{error}</p>
         </form>}
       </div>

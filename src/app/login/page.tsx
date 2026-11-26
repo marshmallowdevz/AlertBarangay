@@ -2,16 +2,31 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { LoadingButton } from "@/components/ui/loading-button";
 import { dashboardForUser } from "@/lib/auth/dashboard-for-user";
+import { portalAllowsRole, wrongPortalMessage, type PortalChoice } from "@/lib/auth/roles";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { toast } from "@/lib/ui/toast";
 import "./login.css";
 
 type Screen = "landing" | "auth";
 type Mode = "sign-in" | "sign-up" | "reset";
-// Admin is intentionally not offered: admins pick either chip and are still
-// routed to the admin dashboard, because routing uses profiles.role only.
-type PortalChoice = "resident" | "official";
+// Two sign-in tabs: Resident, and Barangay Official (staff). Admin accounts
+// sign in through the Barangay Official tab. The account's real role in
+// public.profiles must match the tab, otherwise sign-in is refused.
 type Message = { kind: "error" | "success"; text: string } | null;
+
+// Requests that hang longer than this show a timeout message instead of spinning forever.
+const AUTH_TIMEOUT_MS = 20_000;
+
+class AuthTimeoutError extends Error {}
+
+function withTimeout<T>(promise: Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new AuthTimeoutError()), AUTH_TIMEOUT_MS);
+    promise.then((value) => { window.clearTimeout(timer); resolve(value); }, (error) => { window.clearTimeout(timer); reject(error); });
+  });
+}
 
 const portalCopy: Record<PortalChoice, { eyebrow: string; intro: string }> = {
   resident: { eyebrow: "Resident portal", intro: "Sign in to report incidents and follow advisories." },
@@ -20,6 +35,8 @@ const portalCopy: Record<PortalChoice, { eyebrow: string; intro: string }> = {
 
 const noticeMessages: Record<string, string> = {
   role: "Your account doesn't have an active role yet. Contact your barangay administrator.",
+  signin: "Please sign in to continue.",
+  unavailable: "We couldn't verify your account right now. Please sign in again.",
 };
 
 function initialHash() {
@@ -73,6 +90,8 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Keeps the button in its loading state while the dashboard loads after sign-in.
+  const [redirecting, setRedirecting] = useState(false);
   const [message, setMessage] = useState<Message>(null);
 
   // Already signed in (or refreshing while signed in)? Go straight to the right dashboard.
@@ -84,12 +103,12 @@ export default function LoginPage() {
       const supabase = createSupabaseBrowserClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        if (active && notice) setMessage({ kind: "error", text: noticeMessages[notice] ?? noticeMessages.role });
+        if (active && notice) setMessage({ kind: notice === "signin" ? "success" : "error", text: noticeMessages[notice] ?? noticeMessages.role });
         return;
       }
       const result = await dashboardForUser(supabase, user.id);
       if (!active) return;
-      if (result.ok && !notice) {
+      if (result.ok && notice !== "role") {
         router.replace(result.destination);
         router.refresh();
         return;
@@ -100,7 +119,12 @@ export default function LoginPage() {
     }
 
     resume()
-      .catch(() => { if (active) setMessage({ kind: "error", text: "We couldn't check your session. Check your connection and try again." }); })
+      .catch(() => {
+        if (!active) return;
+        const text = "We couldn't check your session. Check your connection and try again.";
+        setMessage({ kind: "error", text });
+        toast.error(text);
+      })
       .finally(() => { if (active) setCheckingSession(false); });
     return () => { active = false; };
   }, [router]);
@@ -126,6 +150,11 @@ export default function LoginPage() {
   function backToLanding() {
     setScreen("landing"); setMode("sign-in"); setMessage(null);
     window.history.replaceState(null, "", window.location.pathname);
+  }
+
+  function choosePortal(next: PortalChoice) {
+    setPortal(next);
+    setMessage(null);
   }
 
   function toggleMode() {
@@ -156,40 +185,68 @@ export default function LoginPage() {
         if (fullName.trim().length < 2) { setMessage({ kind: "error", text: "Please enter your full name." }); return; }
         if (password.length < 8) { setMessage({ kind: "error", text: "Use a password with at least 8 characters." }); return; }
         if (password !== confirm) { setMessage({ kind: "error", text: "Passwords do not match." }); return; }
-        const { data, error } = await supabase.auth.signUp({
+        // Public sign-up only ever creates resident accounts. Only the name is
+        // sent; the database trigger assigns role = 'resident' and ignores any
+        // role a browser might try to smuggle into the sign-up metadata.
+        const { data, error } = await withTimeout(supabase.auth.signUp({
           email: cleanEmail,
           password,
           options: { data: { full_name: fullName.trim() }, emailRedirectTo: `${window.location.origin}/login` },
-        });
-        if (error) { setMessage({ kind: "error", text: error.message }); return; }
-        if (!data.session || !data.user) {
-          setMessage({ kind: "success", text: "Your account was created. Check your email for a confirmation link, then sign in." });
-          setMode("sign-in"); setPassword(""); setConfirm("");
+        }));
+        if (error) {
+          setMessage({ kind: "error", text: error.status === 0 ? "We couldn't reach the sign-up service. Check your connection." : error.message });
           return;
         }
-        const result = await dashboardForUser(supabase, data.user.id);
-        if (!result.ok) { setMessage({ kind: "error", text: result.message }); return; }
+        if (!data.session || !data.user) {
+          setMessage({ kind: "success", text: "Your resident account was created. Check your email for a confirmation link, then sign in." });
+          setMode("sign-in"); setPortal("resident"); setPassword(""); setConfirm("");
+          return;
+        }
+        const result = await withTimeout(dashboardForUser(supabase, data.user.id));
+        if (!result.ok || result.role !== "resident") {
+          await supabase.auth.signOut();
+          setMessage({ kind: "error", text: result.ok ? "Public sign-up is for residents only." : result.message });
+          return;
+        }
+        toast.success("Welcome to AlertBarangay!");
         router.replace(result.destination);
         router.refresh();
         return;
       }
 
-      const { data, error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
+      const { data, error } = await withTimeout(supabase.auth.signInWithPassword({ email: cleanEmail, password }));
       if (error || !data.user) {
-        setMessage({ kind: "error", text: error?.status === 0 ? "We couldn't reach the sign-in service. Check your connection." : "Wrong email or password." });
+        const text = error?.status === 0 ? "We couldn't reach the sign-in service. Check your connection." : "Wrong email or password.";
+        setMessage({ kind: "error", text });
+        if (error?.status === 0) toast.error(text);
         return;
       }
-      const result = await dashboardForUser(supabase, data.user.id);
+      const result = await withTimeout(dashboardForUser(supabase, data.user.id));
       if (!result.ok) {
         await supabase.auth.signOut();
         setMessage({ kind: "error", text: result.message });
         return;
       }
-      // Route by the account's real role, whatever chip was highlighted.
+      // The chosen tab must match the account's real role (from profiles.role).
+      // Wrong portal: sign straight back out and say which tab to use.
+      if (!portalAllowsRole(portal, result.role)) {
+        await supabase.auth.signOut();
+        const text = wrongPortalMessage(portal, result.role);
+        setMessage({ kind: "error", text });
+        toast.error(text);
+        return;
+      }
+      setRedirecting(true);
       router.replace(result.destination);
       router.refresh();
-    } catch {
-      setMessage({ kind: "error", text: "Something went wrong. Check your connection and try again." });
+    } catch (cause) {
+      const text = cause instanceof AuthTimeoutError
+        ? "The server is taking too long to respond. Please try again."
+        : typeof navigator !== "undefined" && navigator.onLine === false
+          ? "You appear to be offline. Check your connection and try again."
+          : "Something went wrong. Check your connection and try again.";
+      setMessage({ kind: "error", text });
+      toast.error(text);
     } finally {
       setBusy(false);
     }
@@ -202,10 +259,10 @@ export default function LoginPage() {
   const signingUp = mode === "sign-up";
   const resetting = mode === "reset";
   const copy = portalCopy[portal];
-  const heading = signingUp ? "Create Your Account" : resetting ? "Reset your password" : "Hello Welcome Back!";
-  const eyebrow = signingUp ? "Create your account" : resetting ? "Forgot password" : copy.eyebrow;
+  const heading = signingUp ? "Create Your Resident Account" : resetting ? "Reset your password" : "Hello Welcome Back!";
+  const eyebrow = signingUp ? "Resident sign-up" : resetting ? "Forgot password" : copy.eyebrow;
   const intro = signingUp
-    ? "Sign-ups are for residents. Barangay official accounts are created by an administrator."
+    ? "Sign-up is for residents only. Barangay official accounts are created by your barangay administrator."
     : resetting ? "Enter your email and we'll send you a link to choose a new password." : copy.intro;
 
   return <main className={`ab-login ${screen === "auth" ? "is-auth" : "is-landing"}`} data-auth-mode={screen === "auth" ? mode : undefined}>
@@ -222,9 +279,9 @@ export default function LoginPage() {
           <span className="welcome-mark" aria-hidden="true"><ShieldIcon /></span>
           <p className="welcome-brand">AlertBarangay</p>
           <h2 id="welcome-title">Get Started</h2>
-          <p className="welcome-subtitle">Start with sign up or sign in</p>
+          <p className="welcome-subtitle">Residents can sign up. Officials sign in with the account from their administrator.</p>
           <div className="welcome-actions">
-            <button className="welcome-button" type="button" onClick={() => openAuth("sign-up")}>Sign Up</button>
+            <button className="welcome-button" type="button" onClick={() => { setPortal("resident"); openAuth("sign-up"); }}>Sign Up as Resident</button>
             <button className="welcome-button" type="button" onClick={() => openAuth("sign-in")}>Sign In</button>
           </div>
           <CardWaves />
@@ -243,8 +300,8 @@ export default function LoginPage() {
         <form onSubmit={(event) => void submit(event)} noValidate>
           {mode === "sign-in" && <fieldset className="roles">
             <legend>I am signing in as</legend>
-            <label><input type="radio" name="role" value="resident" checked={portal === "resident"} onChange={() => setPortal("resident")} /><span className="chip">Admin</span></label>
-            <label><input type="radio" name="role" value="official" checked={portal === "official"} onChange={() => setPortal("official")} /><span className="chip">Barangay Official</span></label>
+            <label><input type="radio" name="role" value="resident" checked={portal === "resident"} onChange={() => choosePortal("resident")} /><span className="chip">Resident</span></label>
+            <label><input type="radio" name="role" value="official" checked={portal === "official"} onChange={() => choosePortal("official")} /><span className="chip">Barangay Official</span></label>
           </fieldset>}
 
           {signingUp && <div className="field">
@@ -259,18 +316,24 @@ export default function LoginPage() {
           {mode === "sign-in" && <button type="button" className="forgot-link" onClick={() => openAuth("reset")}>Forgot password?</button>}
           {signingUp && <PasswordField id="confirm-password" label="Confirm password" value={confirm} onChange={setConfirm} autoComplete="new-password" show={showConfirm} onToggle={() => setShowConfirm((v) => !v)} />}
 
-          <button className="submit" type="submit" disabled={busy}>
-            {busy
-              ? (signingUp ? "Creating account…" : resetting ? "Sending link…" : "Signing in…")
-              : <>{signingUp ? "Sign Up" : resetting ? "Send reset link" : "Sign In"} <span aria-hidden="true">&rarr;</span></>}
-          </button>
+          <LoadingButton
+            className="submit"
+            loading={busy || redirecting}
+            loadingText={redirecting ? "Opening your dashboard…" : signingUp ? "Creating account…" : resetting ? "Sending link…" : "Signing in…"}
+          >
+            {signingUp ? "Sign Up" : resetting ? "Send reset link" : "Sign In"} <span aria-hidden="true">&rarr;</span>
+          </LoadingButton>
           <p className="form-message" role="status" aria-live="polite" data-kind={message?.kind} data-visible={message ? "true" : undefined}>{message?.text}</p>
         </form>
 
-        <p className="mode-prompt">
-          <span>{mode === "sign-in" ? "New to Alert Barangay?" : resetting ? "Remembered it?" : "Already have an account?"}</span>
-          <button className="mode-toggle" type="button" onClick={toggleMode}>{mode === "sign-in" ? "Create an account" : "Sign in"}</button>
-        </p>
+        {mode === "sign-in" && portal === "official"
+          ? <p className="mode-prompt official-note">
+            <span>Official accounts are created by your barangay administrator. There is no public sign-up for officials.</span>
+          </p>
+          : <p className="mode-prompt">
+            <span>{mode === "sign-in" ? "New resident?" : resetting ? "Remembered it?" : "Already have an account?"}</span>
+            <button className="mode-toggle" type="button" onClick={toggleMode} disabled={busy}>{mode === "sign-in" ? "Create a resident account" : "Sign in"}</button>
+          </p>}
       </div>
       <CardWaves />
     </section>
