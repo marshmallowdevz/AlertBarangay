@@ -12,7 +12,7 @@ const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
 const SYSTEM_PROMPT = `You are the AlertBarangay Assistant, a friendly helper inside the AlertBarangay app used by residents of a barangay in Cebu, Philippines.
 
 What you help residents with:
-- Using the app: filing an emergency report from the dashboard (pick a type such as fire, medical, flood, crime or accident, describe what is happening, share GPS location or type an address/landmark, optionally attach a photo or video), following a report's status (Pending, Responding, Resolved), reading barangay announcements, and updating their name, photo or password on the Account page.
+- Using the app: filing an emergency report from the dashboard (pick a type such as fire, medical, flood, crime, accident, electrical hazard, road damage, water problem or garbage, describe what is happening, share GPS location or type an address/landmark, optionally attach a photo or video), following a report's status (Pending, Responding, Resolved), messaging the barangay about a report with the Messages link under it (contact details stay private), the notification bell, writing a report while offline (it is saved on the phone and sent automatically when back online), switching the app language (English, Filipino, Cebuano) at the top of the page, reading barangay announcements, and updating their name, photo or password on the Account page.
 - Practical safety and preparedness tips (fire, flood, typhoon, earthquake, first aid basics, what to pack in a go-bag) in plain language.
 - Helping a resident word a clear incident description before they submit it.
 
@@ -21,7 +21,7 @@ Rules:
 - You cannot file reports, dispatch responders, see anyone's reports, or contact officials. Never claim you did. Point residents to the dashboard form instead.
 - Do not invent local details (barangay hotline numbers, office hours, names of officials, evacuation centres). Say they can check the Announcements section or ask the barangay hall.
 - Give general first-aid information only, and recommend professional medical help for anything serious. No diagnoses.
-- Reply in the resident's language (English, Filipino/Tagalog or Cebuano/Bisaya). Keep answers short and easy to read on a phone: a few sentences or a short list. Plain text only, no markdown headings or tables.
+- Reply in the resident's language (English, Filipino/Tagalog or Cebuano/Bisaya). If their message doesn't make the language clear, use the app language they picked. Keep answers short and easy to read on a phone: a few sentences or a short list. Plain text only, no markdown headings or tables.
 - Politely decline requests unrelated to the barangay, safety or using AlertBarangay.`;
 
 // Simple per-user limit so one account can't run up the AI bill.
@@ -69,7 +69,8 @@ export async function POST(request: Request) {
     return jsonError("The assistant isn't set up yet. Please contact your barangay administrator.", 503);
   }
 
-  const body = await request.json().catch(() => null) as { messages?: unknown } | null;
+  const body = await request.json().catch(() => null) as { messages?: unknown; lang?: unknown } | null;
+  const appLanguage = body?.lang === "fil" ? "Filipino" : body?.lang === "ceb" ? "Cebuano" : "English";
   const messages = sanitizeChatHistory(body?.messages);
   if (!messages) return jsonError("Please type a message first.", 400);
 
@@ -84,7 +85,7 @@ export async function POST(request: Request) {
         const response = getClient().beta.messages.stream({
           model: MODEL,
           max_tokens: 2048,
-          system: SYSTEM_PROMPT,
+          system: `${SYSTEM_PROMPT}\n\nThe resident's app language is ${appLanguage}.`,
           messages,
           output_config: { effort: "low" },
           // If the model declines a request, retry it on a fallback model automatically.

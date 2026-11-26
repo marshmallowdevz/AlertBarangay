@@ -2,7 +2,8 @@ import { supabase } from './supabaseClient';
 import { fetchJson } from '@/lib/fetch-json';
 
 const typeNames = {
-  fire: 'Fire', medical: 'Medical', flood: 'Flooding', crime: 'Other', accident: 'Other', other: 'Other',
+  fire: 'Fire', medical: 'Medical', flood: 'Flooding', crime: 'Crime', accident: 'Accident', other: 'Other',
+  electrical_hazard: 'Electrical Hazard', garbage_collection: 'Garbage Collection', road_damage: 'Road Damage', water_problems: 'Water Problems',
 };
 
 function toReport(row) {
@@ -21,6 +22,12 @@ function toReport(row) {
     created_at: row.created_at,
     time: new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(row.created_at)),
     dispatchHistory: [],
+    // Kept for the live map and report messages.
+    incidentId: row.id,
+    rawType: row.type,
+    rawStatus: row.status,
+    lat: row.lat != null ? Number(row.lat) : null,
+    lng: row.lng != null ? Number(row.lng) : null,
   };
 }
 

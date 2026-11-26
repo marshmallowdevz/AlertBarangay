@@ -187,3 +187,9 @@
 .ab-login .official-note span { display: block; max-width: 340px; margin: 0 auto; text-align: center; font-size: 13px; line-height: 1.5; opacity: .85; }
 .ab-login .submit.is-loading { cursor: wait; opacity: .85; transform: none; }
 .ab-login .submit:disabled { cursor: wait; }
+
+/* Language picker on the sign-in screens */
+.ab-login{position:relative}
+.ab-login .login-lang{position:absolute;top:14px;right:14px;z-index:20;background:#ffffff14;color:#f6dde5;border-color:#ffffff33;backdrop-filter:blur(6px)}
+.ab-login .login-lang select option{color:#231815;background:#fff}
+.ab-login .login-lang:focus-within{outline-color:#d4a843}

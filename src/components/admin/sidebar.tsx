@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, LayoutDashboard, LogOut, Menu, Settings, ShieldCheck, Users } from "lucide-react";
+import { BarChart3, Bell, LayoutDashboard, LogOut, Menu, Settings, ShieldCheck, Users } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { clearOfflinePages } from "@/components/ui/service-worker";
 
 export function AdminSidebar({ email, fullName, avatarUrl, collapsed, onToggle }: { email: string; fullName: string; avatarUrl: string; collapsed: boolean; onToggle: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   async function signOut() {
+    clearOfflinePages();
     await createSupabaseBrowserClient().auth.signOut();
     router.replace("/login"); router.refresh();
   }
@@ -21,6 +23,7 @@ export function AdminSidebar({ email, fullName, avatarUrl, collapsed, onToggle }
     <nav className="side-nav" aria-label="Main navigation">
       <Link href="/admin/dashboard" title="Overview" aria-label="Overview" className={`nav-link ${pathname === "/admin/dashboard" ? "active" : ""}`}><LayoutDashboard size={18} /><span className="nav-label">Overview</span></Link>
       <Link href="/admin/users" title="User management" aria-label="User management" className={`nav-link ${pathname.startsWith("/admin/users") ? "active" : ""}`}><Users size={18} /><span className="nav-label">User management</span></Link>
+      <Link href="/admin/analytics" title="Analytics" aria-label="Analytics" className={`nav-link ${pathname.startsWith("/admin/analytics") ? "active" : ""}`}><BarChart3 size={18} /><span className="nav-label">Analytics</span></Link>
       <Link href="/admin/announcements" title="Announcements" aria-label="Announcements" className={`nav-link ${pathname.startsWith("/admin/announcements") ? "active" : ""}`}><Bell size={18} /><span className="nav-label">Announcements</span></Link>
     </nav>
     <div className="sidebar-spacer" />

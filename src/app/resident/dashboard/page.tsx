@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function ResidentDashboardPage() {
   const { userId, fullName } = await requireRolePage("resident");
-  return <RoleDashboard role="resident" fullName={fullName}>
+  return <RoleDashboard role="resident" userId={userId} fullName={fullName}>
     <ResidentDashboard userId={userId} />
     <ResidentAssistant firstName={fullName.split(" ")[0] ?? ""} />
   </RoleDashboard>;
