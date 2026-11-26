@@ -1,14 +1,17 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { isUserBanned } from "@/lib/auth/is-user-banned";
 import { sanitizeChatHistory } from "@/lib/chat/assistant";
-import { localAssistantReply } from "@/lib/chat/local-assistant";
+import { readGroqStream } from "@/lib/chat/groq";
+import { answerFromFaq, type FaqLang } from "@/lib/chat/faq";
 import { jsonError } from "@/lib/http";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
+// Groq (free tier) via its OpenAI-compatible API. See https://console.groq.com/docs/models
+const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+const MODEL = process.env.GROQ_MODEL || "llama-3.1-8b-instant";
+const REQUEST_TIMEOUT_MS = 45_000;
 
 const SYSTEM_PROMPT = `You are the AlertBarangay Assistant, a friendly helper inside the AlertBarangay app used by residents of a barangay in Cebu, Philippines.
 
@@ -47,12 +50,6 @@ function rateLimited(userId: string) {
   return false;
 }
 
-let client: Anthropic | null = null;
-function getClient() {
-  client ??= new Anthropic({ timeout: 45_000, maxRetries: 1 });
-  return client;
-}
-
 export async function POST(request: Request) {
   // Only signed-in, active resident accounts may use the assistant.
   const supabase = await createSupabaseServerClient();
@@ -66,7 +63,8 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json().catch(() => null) as { messages?: unknown; lang?: unknown } | null;
-  const appLanguage = body?.lang === "fil" ? "Filipino" : body?.lang === "ceb" ? "Cebuano" : "English";
+  const lang: FaqLang = body?.lang === "fil" || body?.lang === "ceb" ? body.lang : "en";
+  const appLanguage = lang === "fil" ? "Filipino" : lang === "ceb" ? "Cebuano" : "English";
   const messages = sanitizeChatHistory(body?.messages);
   if (!messages) return jsonError("Please type a message first.", 400);
 
@@ -74,64 +72,78 @@ export async function POST(request: Request) {
     return jsonError("You've sent a lot of messages. Please wait a few minutes and try again.", 429);
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return new Response(localAssistantReply(messages, body?.lang === "fil" || body?.lang === "ceb" ? body.lang : "en"), {
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Cache-Control": "no-store",
-        "X-Content-Type-Options": "nosniff",
-      },
+  // Plug and play: without a Groq key (or when Groq is down or over its free
+  // quota) the assistant answers from built-in English/Filipino/Cebuano help.
+  const lastQuestion = messages[messages.length - 1]?.content ?? "";
+  const builtIn = () => textResponse(answerFromFaq(lastQuestion, lang));
+  const apiKey = process.env.GROQ_API_KEY?.trim();
+  if (!apiKey) return builtIn();
+
+  const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  const signal = AbortSignal.any([request.signal, timeout]);
+  let upstream: Response;
+  try {
+    upstream = await fetch(GROQ_URL, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: MODEL,
+        stream: true,
+        temperature: 0.4,
+        max_tokens: 1024,
+        messages: [
+          { role: "system", content: `${SYSTEM_PROMPT}\n\nThe resident's app language is ${appLanguage}.` },
+          ...messages,
+        ],
+      }),
+      signal,
+      cache: "no-store",
     });
+  } catch (error) {
+    if (request.signal.aborted) return new Response(null, { status: 499 });
+    console.error("[resident-chat] could not reach Groq", timeout.aborted ? "timeout" : error);
+    return builtIn();
+  }
+
+  if (!upstream.ok || !upstream.body) {
+    const detail = await upstream.text().catch(() => "");
+    if (upstream.status === 401 || upstream.status === 403) console.error("[resident-chat] GROQ_API_KEY was rejected; using built-in answers");
+    else console.error("[resident-chat] Groq request failed; using built-in answers", { status: upstream.status, detail: detail.slice(0, 300) });
+    return builtIn();
   }
 
   const encoder = new TextEncoder();
+  const groqBody = upstream.body;
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
+      let wroteText = false;
       try {
-        const response = getClient().beta.messages.stream({
-          model: MODEL,
-          max_tokens: 2048,
-          system: `${SYSTEM_PROMPT}\n\nThe resident's app language is ${appLanguage}.`,
-          messages,
-          output_config: { effort: "low" },
-          // If the model declines a request, retry it on a fallback model automatically.
-          betas: ["server-side-fallback-2026-07-01"],
-          fallbacks: "default",
-        }, { signal: request.signal });
-
-        let wroteText = false;
-        for await (const event of response) {
-          if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-            wroteText = true;
-            controller.enqueue(encoder.encode(event.delta.text));
-          }
+        for await (const text of readGroqStream(groqBody)) {
+          wroteText = true;
+          controller.enqueue(encoder.encode(text));
         }
-        const final = await response.finalMessage();
-        if (final.stop_reason === "refusal" && !wroteText) {
-          controller.enqueue(encoder.encode("Sorry, I can't help with that. For emergencies, call 911 and send a report from your dashboard."));
-        } else if (!wroteText) {
-          controller.enqueue(encoder.encode("Sorry, I couldn't come up with an answer. Please try asking another way."));
-        }
-        controller.close();
+        if (!wroteText) controller.enqueue(encoder.encode("Sorry, I couldn't come up with an answer. Please try asking another way."));
       } catch (error) {
-        if (request.signal.aborted) {
-          controller.close();
-          return;
+        if (!request.signal.aborted) {
+          console.error("[resident-chat] stream failed", error);
+          controller.enqueue(encoder.encode(!wroteText
+            ? answerFromFaq(lastQuestion, lang)
+            : timeout.aborted
+              ? "\n\n[The assistant took too long to answer. Please try again.]"
+              : "\n\n[The assistant is unavailable right now. Please try again in a moment.]"));
         }
-        let message = "\n\n[The assistant is unavailable right now. Please try again in a moment.]";
-        if (error instanceof Anthropic.RateLimitError) message = "\n\n[The assistant is busy right now. Please try again in a minute.]";
-        else if (error instanceof Anthropic.APIConnectionTimeoutError) message = "\n\n[The assistant took too long to answer. Please try again.]";
-        else if (error instanceof Anthropic.AuthenticationError) console.error("[resident-chat] Anthropic API key was rejected");
-        if (!(error instanceof Anthropic.AuthenticationError)) {
-          console.error("[resident-chat] request failed", error instanceof Anthropic.APIError ? { status: error.status, message: error.message } : error);
-        }
-        controller.enqueue(encoder.encode(message));
-        controller.close();
+      } finally {
+        try { controller.close(); } catch { /* already closed by a cancel */ }
       }
     },
+    cancel() { void groqBody.cancel().catch(() => undefined); },
   });
 
-  return new Response(stream, {
+  return textResponse(stream);
+}
+
+function textResponse(body: BodyInit) {
+  return new Response(body, {
     headers: {
       "Content-Type": "text/plain; charset=utf-8",
       "Cache-Control": "no-store",

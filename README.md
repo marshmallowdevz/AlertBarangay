@@ -24,8 +24,9 @@ Routing always uses the account's real role in `public.profiles.role`. The Resid
    NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_xxx
    SUPABASE_SECRET_KEY=sb_secret_xxx
-   # Optional: enables the resident AI assistant
-   ANTHROPIC_API_KEY=sk-ant-...
+   # Optional: AI answers for the resident assistant (free key from console.groq.com).
+   # Without it the assistant answers from built-in English/Filipino/Cebuano help.
+   GROQ_API_KEY=gsk_...
    ```
 
    The secret key (Supabase > Project Settings > API Keys) is used only by server code in `src/lib/supabase/admin.ts`. Never give it a `NEXT_PUBLIC_` prefix and never commit `.env.local` (it is git-ignored).
