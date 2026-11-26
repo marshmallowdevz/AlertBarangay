@@ -12,7 +12,7 @@ import DispatchView from './DispatchView';
 import AnnouncementsView from './AnnouncementsView';
 import { archiveAnnouncement, createAnnouncement, deleteAnnouncement, listAnnouncements, subscribeToAnnouncements, updateAnnouncement } from './announcementService';
 import Icon from './Icon';
-import { dispatchReport, listReports, markReportDone } from './reportService';
+import { dispatchReport, listDispatches, listReports, markReportDone } from './reportService';
 import {
   getOrInitializeDashboardContacts,
   getOrInitializeDashboardProfile,
@@ -108,6 +108,7 @@ function Official({ user, onSignOut }) {
   const [reportsLoading, setReportsLoading] = useState(isConfigured);
   const [reportsError, setReportsError] = useState(isConfigured ? '' : configError);
   const [reportsRetry, setReportsRetry] = useState(0);
+  const [dispatchesError, setDispatchesError] = useState('');
   const [announcementLoading, setAnnouncementLoading] = useState(isConfigured);
   const [announcementError, setAnnouncementError] = useState(isConfigured ? '' : configError);
   const [announcementRetry, setAnnouncementRetry] = useState(0);
@@ -263,6 +264,13 @@ function Official({ user, onSignOut }) {
       })
       .finally(() => { if (active) setReportsLoading(false); });
 
+    listDispatches()
+      .then((dispatches) => { if (active) { setOperationalData((current) => ({ ...current, dispatches })); setDispatchesError(''); } })
+      .catch((error) => {
+        console.error('Unable to load recent dispatches.', error);
+        if (active) setDispatchesError(error.message || 'Recent dispatches could not be loaded.');
+      });
+
     return () => { active = false; };
   }, [reportsRetry, user]);
 
@@ -275,9 +283,15 @@ function Official({ user, onSignOut }) {
         .then((rows) => { if (active) setOperationalData((current) => ({ ...current, reports: rows })); })
         .catch((error) => console.error('Unable to refresh reports after a live change.', error));
     };
+    const refreshDispatches = () => {
+      listDispatches()
+        .then((dispatches) => { if (active) { setOperationalData((current) => ({ ...current, dispatches })); setDispatchesError(''); } })
+        .catch((error) => { if (active) setDispatchesError(error.message || 'Recent dispatches could not be loaded.'); });
+    };
     const channel = supabase
       .channel('official-reports-live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'incidents' }, refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'incident_dispatches' }, refreshDispatches)
       .subscribe();
     return () => {
       active = false;
@@ -504,7 +518,16 @@ function Official({ user, onSignOut }) {
   const dispatchResponse = async ({ reportId, responseType, note }) => {
     const report = operationalData.reports.find((item) => item.id === reportId);
     if (!report) throw new Error('That incident could not be found. Refresh the dashboard and try again.');
-    await dispatchReport({ reportId: report.databaseId, responseType, note });
+    const savedDispatch = await dispatchReport({ reportId: report.databaseId, responseType, note });
+    const recentDispatch = {
+      id: savedDispatch.id,
+      responseType: savedDispatch.response_type,
+      reportTitle: report.description || report.type,
+      note: savedDispatch.note,
+      createdAt: savedDispatch.created_at,
+    };
+    setOperationalData((current) => ({ ...current, dispatches: [recentDispatch, ...current.dispatches.filter((item) => item.id !== recentDispatch.id)] }));
+    setDispatchesError('');
     const rows = await listReports();
     setOperationalData((current) => ({ ...current, reports: rows }));
   };
@@ -713,7 +736,7 @@ function Official({ user, onSignOut }) {
             />
           )}
           {activeNav === 'dispatch' && (
-            <DispatchView reports={operationalData.reports} dispatches={operationalData.reports.flatMap((report) => report.dispatchHistory.filter((event) => event.eventType === 'dispatched').map((event) => ({ ...event, reportId: report.id }))).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))} onDispatch={dispatchResponse} />
+            <DispatchView reports={operationalData.reports} dispatches={operationalData.dispatches} dispatchesError={dispatchesError} onDispatch={dispatchResponse} />
           )}
           {activeNav === 'residents' && <ResidentsView residents={operationalData.residents} />}
           {activeNav === 'messages' && (

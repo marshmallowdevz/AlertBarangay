@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { fetchJson } from '@/lib/fetch-json';
 
 const typeNames = {
   fire: 'Fire', medical: 'Medical', flood: 'Flooding', crime: 'Other', accident: 'Other', other: 'Other',
@@ -36,20 +37,35 @@ export async function listReports() {
   return (data ?? []).map(toReport);
 }
 
-async function updateIncidentStatus(reportId, status) {
-  const incidentId = reportId.startsWith('incident:') ? reportId.slice('incident:'.length) : reportId;
-  const { data, error } = await supabase
-    .from('incidents')
-    .update({ status })
-    .eq('id', incidentId)
-    .select('*')
-    .single();
-  if (error) throw new Error(error.message || 'The incident status update failed.');
-  return toReport(data);
+export async function listDispatches() {
+  const { dispatches } = await fetchJson('/api/official/dispatches');
+  return (dispatches ?? []).map((dispatch) => ({
+    id: dispatch.id,
+    responseType: dispatch.response_type,
+    reportTitle: dispatch.incident?.description || dispatch.incident?.type || 'Incident',
+    note: dispatch.note,
+    createdAt: dispatch.created_at,
+  }));
 }
 
-export async function dispatchReport({ reportId }) {
-  return updateIncidentStatus(reportId, 'responding');
+async function updateIncidentStatus(reportId, status) {
+  const incidentId = reportId.startsWith('incident:') ? reportId.slice('incident:'.length) : reportId;
+  const { incident } = await fetchJson(`/api/official/incidents/${incidentId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status }),
+  });
+  return toReport(incident);
+}
+
+export async function dispatchReport({ reportId, responseType, note }) {
+  const incidentId = reportId.startsWith('incident:') ? reportId.slice('incident:'.length) : reportId;
+  const { dispatch } = await fetchJson('/api/official/dispatches', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ incidentId, responseType, note }),
+  });
+  return dispatch;
 }
 
 export async function markReportDone({ reportId }) {

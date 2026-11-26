@@ -15,6 +15,8 @@
   "/api/admin/users/[id]/password/route": "/api/admin/users/[id]/password",
   "/api/admin/users/[id]/route": "/api/admin/users/[id]",
   "/api/admin/users/route": "/api/admin/users",
+  "/api/official/dispatches/route": "/api/official/dispatches",
+  "/api/official/incidents/[id]/route": "/api/official/incidents/[id]",
   "/auth/reset/page": "/auth/reset",
   "/dashboard/page": "/dashboard",
   "/login/page": "/login",

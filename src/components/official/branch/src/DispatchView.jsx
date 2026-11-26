@@ -12,7 +12,7 @@ const responseTypes = [
   'CCDRRMO',
 ];
 
-export default function DispatchView({ reports, dispatches, onDispatch }) {
+export default function DispatchView({ reports, dispatches, dispatchesError, onDispatch }) {
   const dispatchableReports = reports.filter((report) => !['Resolved', 'Closed'].includes(report.status));
   const [reportId, setReportId] = useState(dispatchableReports[0]?.id ?? '');
   const [responseType, setResponseType] = useState(responseTypes[0]);
@@ -72,9 +72,10 @@ export default function DispatchView({ reports, dispatches, onDispatch }) {
       <section className="card">
         <div className="card-head"><div><h2>Recent dispatches</h2><p className="muted">Dispatch records are shared and saved.</p></div></div>
         <div className="stack">
+          {dispatchesError && <p className="form-error" role="alert">{dispatchesError}</p>}
           {dispatches.length === 0 ? <p className="empty">No responses dispatched yet.</p> : dispatches.map((dispatch) => (
             <article key={dispatch.id} className="list-item">
-              <strong>{dispatch.responseType} · {dispatch.reportId}</strong>
+              <strong>{dispatch.responseType} · {dispatch.reportTitle}</strong>
               {dispatch.note && <p>{dispatch.note}</p>}
               <small>{new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(dispatch.createdAt))}</small>
             </article>

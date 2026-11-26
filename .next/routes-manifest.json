@@ -72,6 +72,14 @@
         "nxtPid": "nxtPid"
       },
       "namedRegex": "^/api/admin/users/(?<nxtPid>[^/]+?)/password(?:/)?$"
+    },
+    {
+      "page": "/api/official/incidents/[id]",
+      "regex": "^/api/official/incidents/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/official/incidents/(?<nxtPid>[^/]+?)(?:/)?$"
     }
   ],
   "staticRoutes": [
@@ -158,6 +166,12 @@
       "regex": "^/api/admin/users(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/admin/users(?:/)?$"
+    },
+    {
+      "page": "/api/official/dispatches",
+      "regex": "^/api/official/dispatches(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/official/dispatches(?:/)?$"
     },
     {
       "page": "/auth/reset",

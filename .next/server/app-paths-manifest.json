@@ -15,6 +15,8 @@
   "/api/admin/users/[id]/password/route": "app/api/admin/users/[id]/password/route.js",
   "/api/admin/users/[id]/route": "app/api/admin/users/[id]/route.js",
   "/api/admin/users/route": "app/api/admin/users/route.js",
+  "/api/official/dispatches/route": "app/api/official/dispatches/route.js",
+  "/api/official/incidents/[id]/route": "app/api/official/incidents/[id]/route.js",
   "/auth/reset/page": "app/auth/reset/page.js",
   "/dashboard/page": "app/dashboard/page.js",
   "/login/page": "app/login/page.js",
