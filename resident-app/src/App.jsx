@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, Fragment } from "react";
+import { lazy, Suspense, useState, useEffect, useRef, Fragment } from "react";
 import {
   Home, FileText, Megaphone, Bell, ShieldCheck, Phone, CircleUserRound, Clapperboard,
   Flame, Waves, Car, Zap, Trash2, MapPin, Droplets, HeartPulse, ClipboardList, Clock,
@@ -13,7 +13,8 @@ import "./landing.css";
 import { ReportMedia } from "./MediaPicker";
 import { getCommunityFileMediaType, getCommunityPostMediaKind, removeCommunityMedia, resolveCommunityPosts, resolveIncidentReports, uploadCommunityMedia } from "./communityMedia";
 import MediaSourceChooser from "./MediaSourceChooser";
-import ReelsMapView from "./ReelsMapView";
+
+const ReelsMapView = lazy(() => import("./ReelsMapView"));
 
 const HOTLINE = "0918-921-0000";
 const HOTLINE_TEL = "tel:+639189210000";
@@ -126,7 +127,7 @@ const toReport = (row, userId) => ({
   status: row.status,
   date: fmtDate(row.created_at),
   createdAt: row.created_at,
-  mine: row.user_id === userId,
+  mine: isSameUser(row.user_id, userId),
   source: "legacy",
   history: (row.report_history || [])
     .slice()
@@ -134,17 +135,19 @@ const toReport = (row, userId) => ({
     .map((h) => ({ status: h.status, date: fmtDate(h.created_at) })),
 });
 
-const toIncidentReport = (row, userId, statusHistory = []) => ({
+const toIncidentReport = (row, userId, statusHistory = [], mediaUrls = []) => ({
   id: row.id,
   type: incidentLabel(row.type),
   location: `${Number(row.lat).toFixed(6)}, ${Number(row.lng).toFixed(6)}`,
   severity: null,
   description: row.description,
-  media: [],
+  media: mediaUrls
+    .map((item) => typeof item === "string" ? item : item?.url)
+    .filter(Boolean),
   status: row.status === "responding" ? "In Progress" : row.status[0].toUpperCase() + row.status.slice(1),
   date: fmtDate(row.created_at),
   createdAt: row.created_at,
-  mine: row.reporter_id === userId,
+  mine: isSameUser(row.reporter_id, userId),
   source: "incident",
   history: statusHistory.map((event) => ({
     status: event.new_status === "responding"
@@ -167,17 +170,23 @@ const isMissingOptionalTable = (error) =>
   ["42P01", "PGRST205"].includes(error?.code)
   || /relation .* does not exist|could not find the table .* in the schema cache/i.test(error?.message || "");
 
+const isSameUser = (left, right) =>
+  Boolean(left && right && String(left).toLowerCase() === String(right).toLowerCase());
+
 async function fetchReports(userId) {
   const [legacyResult, incidentResult] = await Promise.all([
     supabase.from("reports")
       .select("*, report_history(status, created_at)")
       .order("created_at", { ascending: false }),
     supabase.from("incidents")
-      .select("id, type, description, lat, lng, status, reporter_id, created_at")
+      .select("id, eid, type, description, lat, lng, status, reporter_id, media_path, media_type, media_paths, media_types, created_at")
       .eq("reporter_id", userId)
       .order("created_at", { ascending: false }),
   ]);
   const incidents = incidentResult.data || [];
+  const resolvedIncidents = incidentResult.error
+    ? []
+    : await resolveIncidentReports(supabase, incidents, { userId });
   const incidentIds = incidents.map((row) => row.id);
   let historyResult = incidentIds.length
     ? await supabase.from("incident_status_history")
@@ -194,7 +203,12 @@ async function fetchReports(userId) {
   }
   const reports = [
     ...(legacyResult.data || []).map((row) => toReport(row, userId)),
-    ...incidents.map((row) => toIncidentReport(row, userId, incidentHistory.get(row.id) || [])),
+    ...resolvedIncidents.map((row) => toIncidentReport(
+      row,
+      userId,
+      incidentHistory.get(row.id) || [],
+      row.media_urls || [],
+    )),
   ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   return { error: legacyResult.error || incidentResult.error || historyResult.error, reports };
 }
@@ -576,6 +590,9 @@ export default function App() {
 
   const profileRef = useRef(null);
   const reloadReelsRef = useRef(null);
+  const reloadReportsRef = useRef(null);
+  const reelLoadRequestRef = useRef(0);
+  const reportLoadRequestRef = useRef(0);
   useClickOutside(profileRef, () => setProfileOpen(false));
 
   const userId = session?.user?.id;
@@ -623,6 +640,7 @@ export default function App() {
     let cancelled = false;
 
     const load = async () => {
+      const reportRequest = ++reportLoadRequestRef.current;
       const [profile, reportResult, notificationResult] = await Promise.all([
         fetchProfile(userId),
         fetchReports(userId),
@@ -636,7 +654,9 @@ export default function App() {
         role: profile?.role === "admin" ? "Admin" : "Resident",
         avatarUrl: profile?.avatar_url || "",
       });
-      setReports(reportResult.reports);
+      if (reportRequest === reportLoadRequestRef.current) {
+        setReports(reportResult.reports);
+      }
       setNotifications((current) => [...new Map([
         ...notificationResult.notifications,
         ...current,
@@ -657,19 +677,35 @@ export default function App() {
   useEffect(() => {
     if (!userId) return undefined;
     let active = true;
+    const refreshReports = async () => {
+      const requestId = ++reportLoadRequestRef.current;
+      try {
+        const result = await fetchReports(userId);
+        if (!active || requestId !== reportLoadRequestRef.current) return;
+        setReports(result.reports);
+        if (result.error) {
+          console.error("Some resident reports could not be refreshed.", result.error);
+        }
+      } catch (error) {
+        if (active && requestId === reportLoadRequestRef.current) {
+          console.error("Could not refresh resident reports.", error);
+        }
+      }
+    };
     const loadReelItems = async () => {
+      const requestId = ++reelLoadRequestRef.current;
       setReelsLoading(true);
       try {
         const [communityResult, incidentResult, reportResult] = await Promise.all([
           supabase.from("community_posts").select("*").order("created_at", { ascending: false }).limit(50),
           supabase.from("incidents")
-            .select("id, eid, type, description, lat, lng, status, media_path, media_type, media_paths, media_types, created_at")
+            .select("id, eid, type, description, lat, lng, status, reporter_id, media_path, media_type, media_paths, media_types, created_at")
             .order("created_at", { ascending: false })
             .limit(50),
           supabase.from("reports").select("*").order("created_at", { ascending: false }).limit(50),
         ]);
 
-        if (!active) return;
+        if (!active || requestId !== reelLoadRequestRef.current) return;
 
         if (communityResult.error) console.error("Unable to load community posts for Reels.", communityResult.error);
         if (incidentResult.error) console.error("Unable to load emergency incidents for Reels.", incidentResult.error);
@@ -677,7 +713,12 @@ export default function App() {
 
         const [communityPosts, incidents] = await Promise.all([
           communityResult.error ? [] : resolveCommunityPosts(supabase, communityResult.data || []),
-          incidentResult.error ? [] : resolveIncidentReports(supabase, incidentResult.data || []),
+          incidentResult.error
+            ? []
+            : resolveIncidentReports(supabase, incidentResult.data || [], {
+              userId,
+              canReadAll: user.role === "Admin",
+            }),
         ]);
         const legacyReports = reportResult.error ? [] : (reportResult.data || []).map((report) => ({
           ...report,
@@ -712,7 +753,7 @@ export default function App() {
           })),
         ].sort((left, right) => new Date(right.created_at) - new Date(left.created_at));
 
-        if (active) {
+        if (active && requestId === reelLoadRequestRef.current) {
           setReelItems(items.slice(0, 100));
           const failedSources = [
             communityResult.error && "community posts",
@@ -725,16 +766,21 @@ export default function App() {
         }
       } catch (feedError) {
         console.error("Unable to load the resident Reels feed.", feedError);
-        if (active) setReelsFeedError("Reels could not load. Check your connection and refresh the page.");
+        if (active && requestId === reelLoadRequestRef.current) {
+          setReelsFeedError("Reels could not load. Check your connection and refresh the page.");
+        }
       } finally {
-        if (active) setReelsLoading(false);
+        if (active && requestId === reelLoadRequestRef.current) setReelsLoading(false);
       }
     };
     reloadReelsRef.current = loadReelItems;
+    reloadReportsRef.current = refreshReports;
     const channel = supabase.channel("resident-reels-feed")
       .on("postgres_changes", { event: "*", schema: "public", table: "community_posts" }, loadReelItems)
       .on("postgres_changes", { event: "*", schema: "public", table: "incidents" }, loadReelItems)
+      .on("postgres_changes", { event: "*", schema: "public", table: "incidents", filter: `reporter_id=eq.${userId}` }, refreshReports)
       .on("postgres_changes", { event: "*", schema: "public", table: "reports" }, loadReelItems)
+      .on("postgres_changes", { event: "*", schema: "public", table: "reports", filter: `user_id=eq.${userId}` }, refreshReports)
       .subscribe();
     loadReelItems();
     supabase.from("community_announcements").select("*").order("created_at", { ascending: false })
@@ -742,9 +788,10 @@ export default function App() {
     return () => {
       active = false;
       if (reloadReelsRef.current === loadReelItems) reloadReelsRef.current = null;
+      if (reloadReportsRef.current === refreshReports) reloadReportsRef.current = null;
       supabase.removeChannel(channel);
     };
-  }, [userId]);
+  }, [userId, user.role]);
 
   useEffect(() => {
     if (!userId) return undefined;
@@ -760,9 +807,7 @@ export default function App() {
           ].slice(0, 100);
         });
         if (row.event_type === "incident_status_changed") {
-          fetchReports(userId).then((result) => {
-            if (active) setReports(result.reports);
-          }).catch((error) => console.error("Could not refresh resident reports after a notification.", error));
+          reloadReportsRef.current?.();
         }
       })
       .subscribe((status) => {
@@ -837,9 +882,10 @@ export default function App() {
   };
 
   const handleIncidentSubmitted = async () => {
-    const result = await fetchReports(userId);
-    setReports(result.reports);
-    await reloadReelsRef.current?.();
+    await Promise.all([
+      reloadReportsRef.current?.(),
+      reloadReelsRef.current?.(),
+    ]);
     setToast("Emergency report submitted.");
   };
 
@@ -1308,14 +1354,16 @@ export default function App() {
 
       {toast && <div className="toast" role="status">{toast}</div>}
       {mapOpen && (
-        <ReelsMapView
-          userId={userId}
-          onClose={closeIncidentMap}
-          returnLabel={page === "reels" ? "Reels" : "Back"}
-          initialReportOpen={mapLaunchOptions.openReport}
-          initialReportType={mapLaunchOptions.type}
-          onReportSubmitted={handleIncidentSubmitted}
-        />
+        <Suspense fallback={<div className="auth-loading" role="status">Loading incident map…</div>}>
+          <ReelsMapView
+            userId={userId}
+            onClose={closeIncidentMap}
+            returnLabel={page === "reels" ? "Reels" : "Back"}
+            initialReportOpen={mapLaunchOptions.openReport}
+            initialReportType={mapLaunchOptions.type}
+            onReportSubmitted={handleIncidentSubmitted}
+          />
+        </Suspense>
       )}
       <nav className="bottom-nav" aria-label="Main navigation">
         {PAGES.map(({ key, label, icon: Icon }) => <button key={key} className={`bottom-nav-item ${page === key ? "active" : ""}`} onClick={() => handleNavClick(key)} aria-label={key === "reels" ? "Reels; double-tap to toggle incident map" : label} title={key === "reels" ? "Double-tap to toggle the live incident map" : undefined} aria-current={page === key ? "page" : undefined}><span className="bottom-nav-icon"><Icon size={22} /></span><span>{tr(label, language)}</span></button>)}
